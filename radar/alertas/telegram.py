@@ -17,6 +17,7 @@ import json
 import requests
 
 from radar.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from radar.texto import normalizar
 from radar.log import logger
 
 _API = "https://api.telegram.org/bot{token}/{metodo}"
@@ -98,6 +99,35 @@ def estrelas(pontos: int) -> str:
     return "⭐" * cheias + "☆" * (5 - cheias) + f" ({pontos}/10)"
 
 
+
+def local_legivel(local: str, modalidade: str) -> str:
+    """Como o local aparece na mensagem.
+
+    MEDIDO no primeiro ciclo real: nove vagas chegaram como "Salvador, BA",
+    "Brasília, DF", "Campinas, SP" — todas REMOTAS, marcadas assim pelo
+    filtro nativo do LinkedIn. O texto de local de uma vaga remota traz a
+    sede da empresa, não o lugar onde se trabalha.
+
+    O filtro estava certo e a mensagem estava mentindo. E o estrago dessa
+    combinação é específico: uma vaga que parece estar em Salvador quando
+    você mora em Itapetininga não é lida como "remota" — é lida como "o
+    robô está errado". Basta acontecer duas vezes pra você parar de abrir
+    as notificações.
+
+    "Remoto · Salvador, BA" diz as duas coisas: onde se trabalha e de onde
+    vem a empresa.
+    """
+    local = (local or "").strip()
+    if modalidade != "Remoto":
+        return local or "não informado"
+    if not local:
+        return "Remoto"
+    # O local já diz que é remoto — não repetir.
+    if any(v in normalizar(local) for v in ("remot", "home office", "anywhere")):
+        return local
+    return f"Remoto · {local}"
+
+
 def _teclado_feedback(vaga_id: str) -> dict:
     """Botões 👍/👎 na notificação.
 
@@ -127,9 +157,7 @@ def alerta_vaga(vaga, relevancia: int, motivo: str, dias_antiga: int) -> bool:
     linhas.append(f"<b>{vaga.titulo}</b>")
     linhas.append(f"{vaga.empresa}")
     linhas.append("")
-    linhas.append(f"📍 {vaga.local}")
-    if vaga.modalidade_legivel:
-        linhas.append(f"💼 {vaga.modalidade_legivel}")
+    linhas.append(f"📍 {local_legivel(vaga.local, vaga.modalidade_legivel)}")
     linhas.append(f"🎯 {vaga.senioridade}")
     if motivo:
         linhas.append(f"✅ {motivo}")
@@ -154,8 +182,9 @@ def montar_digest(vagas: list[tuple]) -> list[str]:
 
     linhas = [
         f'{estrelas(rel or 0)} <a href="{link}">{titulo}</a>\n'
-        f'    {empresa} · {local} · {fonte}'
-        for titulo, empresa, link, rel, local, fonte in vagas
+        f'    {empresa or "empresa não informada"} · '
+        f'{local_legivel(local, modalidade)} · {fonte}'
+        for titulo, empresa, link, rel, local, fonte, modalidade in vagas
     ]
 
     partes: list[list[str]] = []

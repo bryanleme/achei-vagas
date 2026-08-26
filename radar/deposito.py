@@ -204,7 +204,7 @@ def pendentes_do_digest() -> list[tuple]:
     """Vagas esperando o resumo, da mais relevante pra menos."""
     with _conectar() as conn:
         return conn.execute(
-            "SELECT titulo, empresa, link, relevancia, local, fonte "
+            "SELECT titulo, empresa, link, relevancia, local, fonte, modalidade "
             "FROM vagas WHERE digest_pendente = 1 "
             "ORDER BY relevancia DESC, encontrada_em DESC"
         ).fetchall()

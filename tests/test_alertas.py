@@ -156,7 +156,7 @@ def test_digest_quebra_em_partes_quando_passa_do_limite():
     API recusar a mensagem inteira; truncar some com vaga sem ninguém saber."""
     vagas = [
         (f"Analista de Processos {i}", "Empresa " + "X" * 40,
-         f"https://exemplo.com/{i}", 6, "Sorocaba - SP", "Gupy")
+         f"https://exemplo.com/{i}", 6, "Sorocaba - SP", "Gupy", "")
         for i in range(60)
     ]
     partes = telegram.montar_digest(vagas)
@@ -219,3 +219,35 @@ def test_depois_da_estreia_o_alerta_imediato_volta():
 
     deposito.salvar(vaga(), 8, "cargo direto", digest_pendente=False)
     assert deposito.estatisticas()["total"] == 1
+
+
+# ===========================================================================
+# Vaga remota com a cidade da SEDE no texto de local
+# ===========================================================================
+
+def test_vaga_remota_nao_finge_estar_na_cidade_da_empresa():
+    """MEDIDO no primeiro ciclo real: nove vagas chegaram como "Salvador, BA",
+    "Brasília, DF", "Campinas, SP" — todas REMOTAS, marcadas assim pelo filtro
+    nativo do LinkedIn. O texto de local de vaga remota traz a sede da
+    empresa, não o lugar onde se trabalha.
+
+    O filtro estava certo e a mensagem é que mentia. E o estrago dessa
+    combinação é específico: uma vaga que parece estar em Salvador, pra quem
+    mora em Itapetininga, não é lida como "remota" — é lida como "o robô está
+    errado".
+    """
+    assert telegram.local_legivel("Salvador, BA", "Remoto") == "Remoto · Salvador, BA"
+    assert telegram.local_legivel("Campinas, SP", "Remoto") == "Remoto · Campinas, SP"
+
+
+def test_local_que_ja_diz_remoto_nao_repete():
+    assert telegram.local_legivel("Remoto", "Remoto") == "Remoto"
+    assert telegram.local_legivel("Home Office", "Remoto") == "Home Office"
+    assert telegram.local_legivel("", "Remoto") == "Remoto"
+
+
+def test_vaga_presencial_mostra_a_cidade_limpa():
+    """A correção não pode ter grudado "Remoto ·" em vaga presencial."""
+    assert telegram.local_legivel("Sorocaba - SP", "Presencial") == "Sorocaba - SP"
+    assert telegram.local_legivel("Tatuí / SP", "") == "Tatuí / SP"
+    assert telegram.local_legivel("", "") == "não informado"
