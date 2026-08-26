@@ -77,12 +77,29 @@ class Vaga:
         diferentes — a empresa publica na Gupy e no LinkedIn, e o agregador
         republica. Sem esta chave, a mesma vaga notifica duas ou três vezes.
 
+        DEVOLVE "" QUANDO NÃO HÁ EMPRESA, e isso é a parte importante.
+
+        MEDIDO na primeira execução com a InfoJobs ligada: vaga confidencial
+        vem sem empresa nenhuma no card, e é comum. Com empresa vazia a
+        chave viraria "|analista de pcp" — idêntica para DUAS vagas
+        diferentes, de duas empresas diferentes, que por acaso têm o mesmo
+        título. A segunda seria descartada como duplicata e nunca notificada.
+
+        Chave vazia desliga a segunda checagem e deixa só o link decidir.
+        O erro que sobra é notificar a mesma vaga duas vezes; o erro evitado
+        é engolir uma vaga real em silêncio. Duplicar é aceitável, perder
+        não.
+
         ATENÇÃO ao mexer: esta chave é gravada no banco em toda inserção. Se
         a fórmula mudar, o histórico inteiro passa a ter chave incompatível
         e a deduplicação para de valer pro que já está gravado — precisa de
         backfill junto, na mesma migração.
         """
-        return f"{normalizar(self.empresa)}|{normalizar(self.titulo)}"
+        empresa = normalizar(self.empresa)
+        titulo = normalizar(self.titulo)
+        if not empresa or not titulo:
+            return ""
+        return f"{empresa}|{titulo}"
 
     @property
     def senioridade(self) -> str:

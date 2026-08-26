@@ -146,11 +146,20 @@ def ja_vista(vaga: Vaga) -> bool:
     fonte; empresa+título pega a MESMA vaga republicada em fonte diferente,
     que tem link diferente e notificaria de novo sem esta segunda chave.
     """
+    chave = vaga.chave_secundaria
     with _conectar() as conn:
-        achou = conn.execute(
-            "SELECT 1 FROM vagas WHERE id = ? OR chave_secundaria = ? LIMIT 1",
-            (vaga.id, vaga.chave_secundaria),
-        ).fetchone()
+        if chave:
+            achou = conn.execute(
+                "SELECT 1 FROM vagas WHERE id = ? OR chave_secundaria = ? LIMIT 1",
+                (vaga.id, chave),
+            ).fetchone()
+        else:
+            # Sem empresa não há segunda chave — ver Vaga.chave_secundaria.
+            # Comparar contra "" casaria com toda vaga confidencial já
+            # gravada e engoliria vaga nova em silêncio.
+            achou = conn.execute(
+                "SELECT 1 FROM vagas WHERE id = ? LIMIT 1", (vaga.id,)
+            ).fetchone()
     return achou is not None
 
 

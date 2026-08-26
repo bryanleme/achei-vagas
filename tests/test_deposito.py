@@ -161,3 +161,30 @@ def test_feedback_e_gravado_na_vaga():
     assert deposito.registrar_feedback(v.id, "positivo") is True
     linhas = deposito.precisao_por_fonte()
     assert linhas[0][2] == 1  # um 👍
+
+
+def test_vaga_confidencial_nao_engole_outra_do_mesmo_titulo():
+    """MEDIDO com a InfoJobs ligada: vaga confidencial vem sem empresa, e é
+    comum. Com empresa vazia a chave secundária viraria "|analista de pcp" —
+    idêntica pra duas vagas diferentes de empresas diferentes com o mesmo
+    título. A segunda seria descartada como duplicata e nunca notificada.
+    """
+    primeira = vaga(empresa="", link="https://infojobs.com.br/vaga/1")
+    segunda = vaga(empresa="", link="https://infojobs.com.br/vaga/2")
+
+    assert primeira.chave_secundaria == ""
+    assert segunda.chave_secundaria == ""
+
+    _guardar(primeira)
+    assert deposito.ja_vista(segunda) is False, "vaga distinta foi engolida"
+    _guardar(segunda)
+    assert deposito.ja_vista(primeira) is True
+    assert deposito.ja_vista(segunda) is True
+
+
+def test_com_empresa_a_segunda_chave_volta_a_valer():
+    """A correção acima não pode ter desligado a dedup entre fontes."""
+    a = vaga(empresa="Yazaki", link="https://gupy.io/1")
+    b = vaga(empresa="Yazaki", link="https://vagas.com.br/2")
+    _guardar(a)
+    assert deposito.ja_vista(b) is True

@@ -64,25 +64,43 @@ fonte fica ou sai.
 | Fonte | Tipo | Cadência |
 |---|---|---|
 | **Gupy** | API JSON | todo ciclo |
+| **Vagas.com** | HTML servido | todo ciclo |
+| **InfoJobs** | HTML servido | todo ciclo |
+| Catho | HTML servido | diária |
 | Remotive, RemoteOK, Jobicy, Himalayas | API JSON | todo ciclo |
 | Arbeitnow | API JSON | diária |
 
-A Gupy é a fonte que importa para este perfil — é o ATS que a indústria
-brasileira usa. E ela tem **API JSON pública**, descoberta inspecionando as
-requisições reais do portal: entrega `city`, `state`, `workplaceType` e
-`publishedDate` em campos separados, com o total de resultados na resposta.
-Isso elimina, para a fonte principal, as três classes de bug mais caras deste
-tipo de projeto: adivinhar localização em texto solto, deduzir modalidade de
-palavra solta, e descobrir o fim da paginação por tentativa e erro.
+**Nenhuma fonte usa navegador.** Isso não foi meta de projeto — foi o que a
+medição mostrou, portal por portal, antes de escrever qualquer scraper:
 
-Os agregadores de vaga remota internacional têm rendimento esperado **baixo**
-e isso está registrado no código: custam uma requisição cada e cobrem o único
-mercado que nenhuma fonte brasileira alcança. Critério de saída: um mês sem
-vaga aprovada e saem.
+- a Gupy tem **API JSON pública** (`employability-portal.gupy.io/api/v1/jobs`),
+  descoberta inspecionando as requisições reais do portal. Entrega `city`,
+  `state`, `workplaceType` e `publishedDate` em campos separados, com o total
+  de resultados na resposta;
+- Vagas.com, InfoJobs e Catho **servem a lista de vagas no HTML da resposta** —
+  10, 22 e 20 cards num `GET` simples.
 
-**Ainda não ligadas** (fase 2, precisam de navegador): LinkedIn, Vagas.com,
-InfoJobs, Catho, 99jobs, Indeed, e boards de ATS por empresa
-(Greenhouse/Lever) das companhias da região.
+O projeto de origem abria Chromium em 9 das 11 fontes. O ciclo lá passava de
+uma hora; aqui leva 20 segundos. E o navegador headless era o vetor de todo
+bloqueio anti-bot — uma fonte bloqueada chegou a estender o ciclo em 19
+minutos entregando zero vaga. Se um portal um dia passar a montar a lista só
+no navegador, o Playwright volta **para ele**, não para todos por precaução.
+
+Para a fonte principal, o dado estruturado elimina de uma vez as três classes
+de bug mais caras deste tipo de projeto: adivinhar localização em texto solto,
+deduzir modalidade de palavra solta, e descobrir o fim da paginação por
+tentativa e erro.
+
+Os agregadores de vaga remota internacional têm rendimento esperado **baixo**,
+e isso está registrado no código. Eles exigem que a vaga **declare** o mercado
+— num portal brasileiro "remoto sem escopo" quer dizer Brasil, num agregador
+em inglês quer dizer o contrário. Sem essa regra, um deles sozinho aprovou 60
+vagas irrelevantes num ciclo. Critério de saída: um mês sem vaga aprovada e
+saem.
+
+**Ainda não ligadas:** LinkedIn, 99jobs, Indeed, Trabalha Brasil, e boards de
+ATS por empresa (Greenhouse/Lever/Gupy) das companhias da região — a fonte de
+melhor rendimento potencial e que o projeto de origem nunca explorou.
 
 ## Rodar
 

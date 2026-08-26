@@ -108,6 +108,54 @@ async def get_json(url: str, params: dict | None = None, headers: dict | None = 
     return await asyncio.to_thread(_buscar)
 
 
+async def get_html(url: str, params: dict | None = None):
+    """GET que devolve a página já parseada.
+
+    Todos os portais brasileiros deste projeto entregam a lista de vagas no
+    HTML da resposta — a página é montada no servidor. Isso foi MEDIDO,
+    portal por portal, antes de qualquer linha de scraper: Vagas.com,
+    InfoJobs, Catho e Trabalha Brasil devolvem os cards prontos pra um GET
+    simples.
+
+    A consequência é grande e vale registrar, porque contraria o que o
+    projeto original assumia: nove das onze fontes de lá abriam Chromium
+    headless, o ciclo levava mais de uma hora e o navegador era o vetor de
+    todo bloqueio anti-bot. Nada disso era necessário pra maioria delas.
+
+    Se um portal um dia passar a montar a lista só no navegador, aí sim
+    vale um scraper de Playwright — pra ele, não pra todos.
+    """
+    from bs4 import BeautifulSoup
+
+    def _buscar():
+        resposta = requests.get(
+            url,
+            params=params,
+            headers={"User-Agent": UA, "Accept-Language": "pt-BR,pt;q=0.9"},
+            timeout=TIMEOUT_HTTP,
+        )
+        resposta.raise_for_status()
+        return BeautifulSoup(resposta.text, "lxml")
+
+    return await asyncio.to_thread(_buscar)
+
+
+def primeiro_texto(elemento) -> str:
+    """Só o primeiro nó de TEXTO do elemento, ignorando filhos.
+
+    Os portais grudam o local da vaga com um tooltip no mesmo elemento —
+    "Pirapora do Bom Jesus / SP A empresa aceita candidaturas de...". Pegar
+    o texto inteiro leva a frase do tooltip junto pro campo de local, e o
+    filtro de cidade passa a comparar contra um parágrafo.
+    """
+    if elemento is None:
+        return ""
+    for filho in elemento.children:
+        if isinstance(filho, str) and filho.strip():
+            return filho.strip()
+    return elemento.get_text(" ", strip=True)
+
+
 def texto_local(*partes: str | None) -> str:
     """Junta cidade/estado/país num texto de local, ignorando vazio.
 

@@ -19,7 +19,7 @@ impressão:
 """
 
 from radar import config
-from radar.fontes import remotas
+from radar.fontes import portais, remotas
 from radar.fontes.base import Cadencia, Fonte
 from radar.fontes.gupy import Gupy
 
@@ -29,6 +29,12 @@ def fontes_ativas() -> list[Fonte]:
         # A fonte que importa. ATS da indústria brasileira, API JSON com
         # cidade/estado/modalidade/data em campo próprio.
         Gupy(estado=config.ESTADO_BUSCA),
+
+        # Portais brasileiros generalistas, todos por HTML servido — sem
+        # navegador. Cobrem a empresa que não usa Gupy.
+        portais.VagasCom(),
+        portais.InfoJobs(),
+        portais.Catho(uf=config.UF_BUSCA.lower(), estado="sao-paulo"),
 
         # Agregadores de remoto internacional. Rendimento esperado baixo pro
         # perfil, custo quase zero. Ver o cabeçalho de remotas.py.

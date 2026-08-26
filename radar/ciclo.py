@@ -241,10 +241,12 @@ async def rodar(so_teste: bool = False) -> dict:
             # da mesma empresa apareceu duas vezes no mesmo ciclo, com links
             # diferentes — a empresa publicou a vaga duas vezes. O link
             # sozinho não pega isso; empresa+título pega.
-            if vaga.id in ja_notificadas or vaga.chave_secundaria in ja_notificadas:
+            chave = vaga.chave_secundaria
+            if vaga.id in ja_notificadas or (chave and chave in ja_notificadas):
                 continue
             ja_notificadas.add(vaga.id)
-            ja_notificadas.add(vaga.chave_secundaria)
+            if chave:
+                ja_notificadas.add(chave)
 
             if deposito.ja_vista(vaga):
                 continue

@@ -1,4 +1,15 @@
-playwright==1.62.0
+# Sem Playwright de proposito.
+#
+# MEDIDO, portal por portal, antes de escrever scraper: Gupy tem API JSON
+# publica, e Vagas.com/InfoJobs/Catho servem a lista de vagas no HTML da
+# resposta. Nenhuma das fontes ativas precisa de navegador. O projeto de
+# origem abria Chromium em 9 das 11 fontes, o ciclo passava de uma hora e o
+# navegador era o vetor de todo bloqueio anti-bot.
+#
+# Se um portal um dia passar a montar a lista so no navegador, o Playwright
+# volta pra ELE -- nao pra todos por precaucao.
 requests==2.34.2
+beautifulsoup4==4.15.0
+lxml==6.1.2
 python-dotenv==1.2.2
 pytest==9.1.1
