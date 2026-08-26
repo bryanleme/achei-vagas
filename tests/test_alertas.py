@@ -251,3 +251,48 @@ def test_vaga_presencial_mostra_a_cidade_limpa():
     assert telegram.local_legivel("Sorocaba - SP", "Presencial") == "Sorocaba - SP"
     assert telegram.local_legivel("Tatuí / SP", "") == "Tatuí / SP"
     assert telegram.local_legivel("", "") == "não informado"
+
+
+# ===========================================================================
+# Falha de entrega silenciosa
+# ===========================================================================
+
+def test_placar_de_entrega_conta_tentativa_e_falha(monkeypatch):
+    """MEDIDO na primeira execução no GitHub Actions: TODAS as mensagens
+    voltaram HTTP 404 (um carriage return invisível no fim do token) e o
+    workflow terminou VERDE. Nenhum alerta chegou, nenhum resumo, nem o
+    batimento — e o painel do Actions mostrava sucesso.
+
+    Esse é o cenário que o batimento diário existe pra impedir: silêncio no
+    Telegram indistinguível de "não achou vaga". Aqui o silêncio ficou
+    indistinguível também no Actions, que era o último lugar onde dava pra
+    perceber. Sistema de alerta que falha calado é pior que nenhum, porque
+    você confia nele.
+    """
+    telegram.zerar_placar()
+    assert telegram.placar_de_entrega() == {"tentativas": 0, "falhas": 0}
+
+    monkeypatch.setattr(telegram, "_chamar", lambda *a, **k: None)  # tudo falha
+    monkeypatch.setattr(telegram, "configurado", lambda: True)
+    monkeypatch.setattr(telegram, "TELEGRAM_CHAT_ID", "123")
+
+    assert telegram.enviar("oi") is False
+    assert telegram.enviar("oi de novo") is False
+    assert telegram.placar_de_entrega() == {"tentativas": 2, "falhas": 2}
+
+
+def test_token_com_espaco_em_branco_e_aparado():
+    """Um "\r", "\n" ou espaço sobrando no fim do token faz a Bot API
+    responder 404 — que se lê como "endpoint errado" e manda investigar o
+    lugar errado. É o erro mais fácil de cometer colando credencial."""
+    import os
+    import importlib
+
+    os.environ["TELEGRAM_BOT_TOKEN"] = "123:ABC\r\n"
+    os.environ["TELEGRAM_CHAT_ID"] = "  456  "
+    from radar import config
+    importlib.reload(config)
+    assert config.TELEGRAM_BOT_TOKEN == "123:ABC"
+    assert config.TELEGRAM_CHAT_ID == "456"
+    del os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"]
+    importlib.reload(config)

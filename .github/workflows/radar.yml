@@ -25,9 +25,9 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -56,6 +56,12 @@ jobs:
         run: python main.py
 
       - name: Salvar as vagas vistas
+        # `always()` porque o passo anterior falha de proposito quando
+        # NENHUMA mensagem foi entregue (ver main.py). Sem isso, o run
+        # ficaria vermelho -- correto -- mas perderia o estado do ciclo
+        # junto, e o ciclo seguinte reencontraria tudo como novo.
+        # A execucao continua vermelha; so o banco e preservado.
+        if: always()
         # ---------------------------------------------------------------
         # ESTE PASSO JÁ REVERTEU CÓDIGO EM PRODUÇÃO. Leia antes de mudar.
         #

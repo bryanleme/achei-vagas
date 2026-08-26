@@ -64,6 +64,31 @@ def _chamar(metodo: str, payload: dict) -> dict | None:
         return None
 
 
+# Placar de entrega do ciclo em andamento.
+#
+# Existe por causa de uma falha real, e a falha é pior do que parece: na
+# primeira execução no GitHub Actions, TODAS as mensagens voltaram HTTP 404
+# (um "\r" invisível no token) e o workflow terminou VERDE. Nenhum alerta
+# chegou, nenhum resumo chegou, o batimento não chegou — e o painel do
+# Actions mostrava sucesso.
+#
+# Isso é exatamente o cenário que o batimento diário existe pra impedir:
+# silêncio no Telegram indistinguível de "não achou vaga". Aqui o silêncio
+# passou a ser indistinguível também no Actions, que era o último lugar onde
+# ainda dava pra perceber. Um sistema de alerta que falha em silêncio é pior
+# que nenhum, porque você confia nele.
+_entregas = {"tentativas": 0, "falhas": 0}
+
+
+def placar_de_entrega() -> dict:
+    return dict(_entregas)
+
+
+def zerar_placar() -> None:
+    _entregas["tentativas"] = 0
+    _entregas["falhas"] = 0
+
+
 def enviar(texto: str, teclado: dict | None = None) -> bool:
     if not configurado():
         logger.warning("Telegram sem token/chat_id — alerta não enviado.")
@@ -81,7 +106,11 @@ def enviar(texto: str, teclado: dict | None = None) -> bool:
     if teclado is not None:
         payload["reply_markup"] = json.dumps(teclado)
 
-    return _chamar("sendMessage", payload) is not None
+    _entregas["tentativas"] += 1
+    entregue = _chamar("sendMessage", payload) is not None
+    if not entregue:
+        _entregas["falhas"] += 1
+    return entregue
 
 
 # ---------------------------------------------------------------------------

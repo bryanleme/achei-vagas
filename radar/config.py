@@ -349,5 +349,19 @@ DIAS_PARA_VAGA_ANTIGA = 30
 # ---------------------------------------------------------------------------
 # INFRAESTRUTURA
 # ---------------------------------------------------------------------------
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+# .strip() não é zelo excessivo — é correção de um bug real.
+#
+# MEDIDO na primeira execução no GitHub Actions: TODAS as chamadas ao
+# Telegram voltaram HTTP 404, e o workflow terminou VERDE. A causa foi um
+# "\r" invisível no fim do token, grudado por um pipe do PowerShell na hora
+# de gravar a secret.
+#
+# O modo de falha é traiçoeiro: a URL da Bot API é `/bot<TOKEN>/sendMessage`,
+# então um caractere a mais no token não dá "credencial inválida" — dá 404,
+# que se lê como "endpoint errado" e manda você investigar o lugar errado.
+#
+# Um espaço, um \r ou um \n sobrando é o erro mais fácil de cometer ao colar
+# credencial em .env ou em campo de secret. Aparar aqui custa nada e fecha a
+# classe inteira, venha o valor de onde vier.
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()

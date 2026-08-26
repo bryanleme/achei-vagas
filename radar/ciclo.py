@@ -184,6 +184,7 @@ async def rodar(so_teste: bool = False) -> dict:
     regras = regras_do_perfil()
 
     deposito.iniciar()
+    telegram.zerar_placar()
 
     # PRIMEIRA EXECUÇÃO: nada alerta na hora, tudo vai pro resumo.
     #
@@ -377,9 +378,27 @@ async def rodar(so_teste: bool = False) -> dict:
         total = deposito.registrar_total()
         logger.info("Banco: %d vaga(s) no histórico.", total)
 
+    placar = telegram.placar_de_entrega()
+    if placar["tentativas"] and placar["falhas"] == placar["tentativas"]:
+        # TODAS as mensagens falharam. Isso não é rede instável — é
+        # configuração quebrada (token errado, chat_id errado, bot
+        # bloqueado). O ciclo inteiro rodou e nada chegou em ninguém.
+        logger.error(
+            "NENHUMA das %d mensagens foi entregue. O ciclo rodou e você não "
+            "recebeu nada — confira TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID.",
+            placar["tentativas"],
+        )
+    elif placar["falhas"]:
+        logger.warning(
+            "%d de %d mensagens falharam. As vagas afetadas não foram gravadas "
+            "e voltam no próximo ciclo.",
+            placar["falhas"], placar["tentativas"],
+        )
+
     return {
         "brutas": brutas,
         "aprovadas": aprovadas,
         "novas": novas,
         "fontes_com_problema": com_problema,
+        "entregas": placar,
     }

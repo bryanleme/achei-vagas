@@ -80,7 +80,21 @@ def main() -> int:
         logger.error("%s", e)
         return 2
 
-    return 0 if not resumo["fontes_com_problema"] else 0
+    # Falhar ALTO quando nada foi entregue.
+    #
+    # MEDIDO na primeira execução no GitHub Actions: todas as mensagens
+    # voltaram 404 por um carriage return invisível no fim do token, e o
+    # workflow terminou VERDE. O painel dizia sucesso, o Telegram estava
+    # mudo, e não havia nenhum lugar onde perceber a diferença.
+    #
+    # O batimento diário existe pra impedir exatamente esse silêncio. Se ele
+    # próprio não consegue sair, o Actions precisa ficar vermelho — é a
+    # última linha de defesa contra um sistema de alerta que falha calado.
+    entregas = resumo.get("entregas", {})
+    if entregas.get("tentativas") and entregas["falhas"] == entregas["tentativas"]:
+        return 3
+
+    return 0
 
 
 if __name__ == "__main__":
