@@ -38,6 +38,9 @@ class Regras:
     qualificadores_cargo: list[str]
     cidades: list[str]
     uf_esperada: str
+    # Termos que DERRUBAM a vaga, por mais que o cargo e a cidade batam.
+    # Verificado antes de tudo — ver config.EXCLUSOES_TITULO.
+    exclusoes_titulo: list[str] = field(default_factory=list)
     aceita_remoto: bool = True
     # Mercados aceitos quando a vaga remota DECLARA um escopo geográfico.
     # None desliga a checagem (aceita qualquer remoto). Lista vazia é
@@ -55,6 +58,10 @@ class Avaliacao:
     cidade: str | None
     escopo: set[str] = field(default_factory=set)
     mercado_confirmado: bool = False
+    # Derrubada por EXCLUSAO no título, antes de qualquer outra regra. É
+    # diferente de "não aprovada": a vaga nem chegou a ser avaliada por
+    # cargo ou por cidade, e não pode contar nos diagnósticos desses dois.
+    excluida: bool = False
     # Preenchido só quando a vaga foi barrada por escopo — serve pro log de
     # diagnóstico dizer QUAL mercado derrubou, e quantas vezes.
     escopo_rejeitado: set[str] = field(default_factory=set)
@@ -66,6 +73,22 @@ class Avaliacao:
 
 def avaliar(vaga: Vaga, regras: Regras) -> Avaliacao:
     titulo = vaga.titulo
+    titulo_normalizado = normalizar(titulo)
+
+    # EXCLUSÃO vem primeiro, e devolve cedo. Não é otimização: uma vaga
+    # excluída não deve aparecer em contador nenhum de diagnóstico como se
+    # tivesse sido barrada por cargo ou por cidade — ela não chegou a ser
+    # avaliada por esses critérios.
+    if contem_qualquer(regras.exclusoes_titulo, titulo_normalizado):
+        return Avaliacao(
+            aprovada=False,
+            bate_cargo_forte=False,
+            bate_cargo_ambiguo=False,
+            bate_ferramenta=False,
+            remota=False,
+            cidade=None,
+            excluida=True,
+        )
 
     # NÍVEL 1 — cargo forte: o título já identifica a área sozinho.
     bate_forte = any(contem_cargo(c, titulo) for c in regras.cargos_fortes)
@@ -73,7 +96,7 @@ def avaliar(vaga: Vaga, regras: Regras) -> Avaliacao:
     # NÍVEL 2 — cargo ambíguo só vale com qualificador de domínio junto.
     # É o que permite ter "Analista Administrativo" na lista sem que toda
     # vaga administrativa do Brasil entre no radar.
-    titulo_norm = normalizar(titulo)
+    titulo_norm = titulo_normalizado
     bate_ambiguo = any(
         contem_cargo(c, titulo) for c in regras.cargos_ambiguos
     ) and contem_qualquer(regras.qualificadores_dominio, titulo_norm, aceitar_plural=True)

@@ -380,3 +380,54 @@ def test_cargo_certo_local_errado_nao_passa(regras):
 
 def test_local_certo_cargo_errado_nao_passa(regras):
     assert combina(vaga(titulo="Vendedor Interno", local="Sorocaba - SP"), regras) is False
+
+
+# ===========================================================================
+# EXCLUSÕES — vaga que não serve, por mais que o cargo bata
+# ===========================================================================
+
+@pytest.mark.parametrize(
+    "titulo",
+    [
+        "ANALISTA DE LOGÍSTICA JUNIOR - Vaga Exclusiva para Pessoas com Deficiência (PCD)",
+        "Analista de Logística JR. (Vaga exclusiva para PCD)",
+        "Analista de PCP - PCD",
+        "Analista de Processos (Pessoa com Deficiência)",
+        "Analista de BI — vaga para portadores de deficiência",
+    ],
+)
+def test_vaga_reservada_a_pcd_e_descartada(titulo, regras):
+    """Pedido explícito do usuário. No Brasil a marcação no TÍTULO é a
+    convenção para posição reservada sob a Lei de Cotas — vaga aberta a
+    todos não escreve isso no nome.
+
+    Todas estas têm cargo forte e cidade aceita: sem a regra de exclusão,
+    passariam com nota alta e virariam alerta imediato.
+    """
+    v = vaga(titulo=titulo, local="Sorocaba - SP")
+    resultado = avaliar(v, regras)
+    assert resultado.aprovada is False
+    assert resultado.excluida is True
+
+
+def test_exclusao_nao_conta_como_barrada_pelo_cargo(regras):
+    """Vaga excluída não pode poluir o diagnóstico de "barrada só pelo
+    título" — ela nem chegou a ser avaliada por cargo."""
+    v = vaga(titulo="Analista de PCP (PCD)", local="Sorocaba - SP")
+    resultado = avaliar(v, regras)
+    assert resultado.excluida is True
+    assert resultado.bate_cargo is False
+
+
+def test_pcd_nao_bate_dentro_de_outra_palavra(regras):
+    """"pcd" tem três letras e a busca é por palavra inteira. Se batesse por
+    substring, qualquer título com essas letras seguidas seria descartado."""
+    for titulo in ["Analista de PCP", "Analista de PCP Pleno", "Especialista PCPD"]:
+        v = vaga(titulo=titulo, local="Sorocaba - SP")
+        assert avaliar(v, regras).excluida is False, titulo
+
+
+def test_vaga_normal_continua_passando(regras):
+    """A exclusão não pode ter derrubado o caso comum."""
+    v = vaga(titulo="Analista de Logística Junior", local="Sorocaba - SP")
+    assert avaliar(v, regras).aprovada is True

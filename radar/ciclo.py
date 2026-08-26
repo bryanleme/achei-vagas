@@ -43,6 +43,7 @@ def regras_do_perfil() -> Regras:
         uf_esperada=config.UF_BUSCA,
         aceita_remoto=config.ACEITA_REMOTO,
         mercados_remoto_aceitos=config.MERCADOS_REMOTO_ACEITOS,
+        exclusoes_titulo=config.EXCLUSOES_TITULO,
     )
 
 
@@ -256,6 +257,7 @@ async def rodar(so_teste: bool = False) -> dict:
     descartes_escopo: Counter = Counter()
     barradas_pelo_titulo = 0
     sem_mercado_declarado = 0
+    excluidas = 0
     ja_notificadas: set[str] = set()
 
     for fonte in fontes:
@@ -285,6 +287,10 @@ async def rodar(so_teste: bool = False) -> dict:
 
             if resultado.escopo_rejeitado:
                 descartes_escopo.update(resultado.escopo_rejeitado)
+
+            if resultado.excluida:
+                excluidas += 1
+                continue
 
             if not resultado.aprovada:
                 if barrada_so_pelo_cargo(vaga, regras):
@@ -385,6 +391,12 @@ async def rodar(so_teste: bool = False) -> dict:
     if descartes_escopo:
         detalhe = "; ".join(f"{m} ({n})" for m, n in descartes_escopo.most_common())
         logger.info("Descartadas por mercado: %s", detalhe)
+    if excluidas:
+        logger.info(
+            "%d vaga(s) descartadas por exclusão no título (ver "
+            "config.EXCLUSOES_TITULO).",
+            excluidas,
+        )
     if sem_mercado_declarado:
         logger.info(
             "%d vaga(s) de agregador estrangeiro descartadas por não declarar "

@@ -178,6 +178,37 @@ QUALIFICADORES_CARGO = [
 
 
 # ---------------------------------------------------------------------------
+# EXCLUSÕES — o que derruba a vaga por mais que o cargo bata
+# ---------------------------------------------------------------------------
+# Verificado ANTES de qualquer outra regra: se um destes aparece no título, a
+# vaga é descartada mesmo com cargo forte e cidade perfeita.
+#
+# PCD: vaga reservada a pessoas com deficiência, sob a Lei de Cotas. No
+# Brasil a marcação no TÍTULO é a convenção para posição reservada — vaga
+# aberta a todos não escreve isso no nome.
+#
+# MEDIDO antes de escolher o critério: a API da Gupy tem um campo próprio
+# `disabilities`, e a tentação era usá-lo por ser dado estruturado. Ele vem
+# `True` em 25 de 30 vagas — significa "aceita candidato PCD", que quase toda
+# vaga aceita por obrigação legal, e NÃO "exclusiva para PCD". Filtrar por ele
+# teria descartado 83% das vagas em silêncio. O título é o único sinal
+# confiável, e é o que se usa aqui.
+#
+# Custo aceito, registrado: uma vaga que mencione PCD no título sem ser
+# exclusiva seria perdida. É o único lugar do projeto onde "perder" foi
+# escolhido de propósito sobre "duplicar" — porque aqui a vaga não serve, e
+# recebê-la só gasta a atenção que o alerta imediato precisa preservar.
+EXCLUSOES_TITULO = [
+    "pcd",
+    "pessoa com deficiência",
+    "pessoas com deficiência",
+    "portador de deficiência",
+    "portadores de deficiência",
+    "candidatos com deficiência",
+]
+
+
+# ---------------------------------------------------------------------------
 # TERMOS DE BUSCA — o que é digitado em cada fonte
 # ---------------------------------------------------------------------------
 # Os termos são DERIVADOS dos cargos acima, nunca mantidos numa lista

@@ -22,6 +22,7 @@ def regras() -> Regras:
         uf_esperada=config.UF_BUSCA,
         aceita_remoto=config.ACEITA_REMOTO,
         mercados_remoto_aceitos=config.MERCADOS_REMOTO_ACEITOS,
+        exclusoes_titulo=config.EXCLUSOES_TITULO,
     )
 
 
