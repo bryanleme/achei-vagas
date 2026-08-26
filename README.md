@@ -15,7 +15,7 @@ buscar → filtrar → pontuar → deduplicar → avisar → gravar
 ## Como ele decide
 
 **O filtro lê só o TÍTULO da vaga, nunca a descrição.** É essa restrição que
-mantém o ruído perto de zero — num ciclo real, 2.760 vagas brutas viraram 14
+mantém o ruído perto de zero — num ciclo real, 4.169 vagas brutas viraram 25
 notificações. O preço simétrico está registrado no código e é medido a cada
 ciclo: vaga com título genérico e conteúdo da área sempre escapa.
 
@@ -129,7 +129,7 @@ python main.py --precisao # rendimento por fonte
 python -m pytest
 ```
 
-95 casos. **Cada teste em `tests/test_regressoes.py` é um bug que aconteceu
+97 casos. **Cada teste em `tests/test_regressoes.py` é um bug que aconteceu
 de verdade em produção** num projeto desta família — não são cenários
 hipotéticos. Os comentários trazem o número de vagas que cada um afetou.
 
