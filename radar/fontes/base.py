@@ -92,6 +92,11 @@ class Fonte:
     # Pausa em segundos entre requisições sequenciais da mesma fonte.
     pausa: float = 0.0
 
+    # A fonte varre por conta própria e não usa o termo de busca. O ciclo
+    # chama uma vez por execução, não uma vez por termo — repetir a mesma
+    # varredura 15 vezes custaria 15x pelo mesmo resultado.
+    ignora_termos: bool = False
+
     async def buscar(self, termo: str, navegador=None) -> Resultado:
         raise NotImplementedError
 

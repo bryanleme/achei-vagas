@@ -22,6 +22,7 @@ from radar.alertas import telegram
 from radar.filtro import Regras, avaliar, barrada_so_pelo_cargo
 from radar.fontes import registro
 from radar.fontes.base import Resultado, com_protecao
+from radar.localizacao import bate_cidade
 from radar.log import logger
 from radar.relevancia import pontuar
 
@@ -185,6 +186,11 @@ def _primeiro_ciclo_do_dia(agora: datetime) -> bool:
 
 async def _buscar_termos(fonte, termos: list[str]) -> list[Resultado]:
     """Roda os termos de uma fonte respeitando o teto dela."""
+    # Fonte que varre por conta própria roda UMA vez, não uma por termo.
+    # Sem isso a varredura por empresa custaria 15x o mesmo resultado.
+    if fonte.ignora_termos:
+        return [await com_protecao(fonte, "")]
+
     if not fonte.max_simultaneas:
         return await asyncio.gather(*[com_protecao(fonte, t) for t in termos])
 
@@ -283,6 +289,16 @@ async def rodar(so_teste: bool = False) -> dict:
         novas_da_fonte = 0
 
         for vaga in vagas_da_fonte:
+            # Descoberta de empresa acontece ANTES do filtro e independe
+            # dele: registra toda empresa que publicou numa cidade do
+            # corredor, mesmo que ESTA vaga não sirva. Uma metalúrgica de
+            # Tatuí que hoje publicou "Soldador" é exatamente a empresa que
+            # mês que vem publica "Analista de PCP" — filtrar a descoberta
+            # por cargo descartaria as empresas certas pela vaga errada.
+            cidade_da_vaga = bate_cidade(vaga.local, config.CIDADES, config.UF_BUSCA)
+            if cidade_da_vaga and vaga.empresa:
+                deposito.registrar_empresa(vaga.empresa, vaga.fonte, cidade_da_vaga)
+
             resultado = avaliar(vaga, regras)
 
             if resultado.escopo_rejeitado:

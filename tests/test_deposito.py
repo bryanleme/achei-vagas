@@ -210,3 +210,43 @@ def test_varredura_inicial_segura_o_alerta_imediato():
     assert ciclo.em_varredura_inicial() is False, (
         "depois de cobrir todos os termos, o alerta imediato precisa ligar"
     )
+
+
+# ===========================================================================
+# Descoberta de empresas do corredor
+# ===========================================================================
+
+def test_nome_de_empresa_e_amarrado_a_fonte_que_o_produziu():
+    """Nome de empresa NÃO é identificador universal — cada portal escreve
+    do seu jeito.
+
+    MEDIDO: a varredura por empresa da Gupy consulta por `careerPageName`.
+    "Grupo Caio" (colhido da Gupy) devolve 44 vagas; "Yazaki do Brasil
+    Ltda." (colhido do Vagas.com) devolve ZERO, porque na Gupy a empresa não
+    se chama assim. Consultar um portal com o vocabulário de outro falha em
+    SILÊNCIO — parece "não há vaga" e é "perguntei errado".
+    """
+    deposito.registrar_empresa("Grupo Caio", "Gupy", "Botucatu")
+    deposito.registrar_empresa("Yazaki do Brasil Ltda.", "Vagas.com", "Tatuí")
+
+    da_gupy = deposito.empresas_do_corredor("Gupy")
+    assert da_gupy == ["Grupo Caio"]
+    assert "Yazaki do Brasil Ltda." not in da_gupy
+    assert deposito.empresas_do_corredor("Vagas.com") == ["Yazaki do Brasil Ltda."]
+
+
+def test_empresa_repetida_nao_duplica_e_conta_aparicoes():
+    for _ in range(3):
+        deposito.registrar_empresa("Smurfit Westrock", "Gupy", "Porto Feliz")
+    assert deposito.empresas_do_corredor("Gupy") == ["Smurfit Westrock"]
+    with deposito._conectar() as conn:
+        n = conn.execute(
+            "SELECT aparicoes FROM empresas WHERE nome = ?", ("Smurfit Westrock",)
+        ).fetchone()[0]
+    assert n == 3
+
+
+def test_empresa_sem_nome_e_ignorada():
+    deposito.registrar_empresa("", "Gupy", "Sorocaba")
+    deposito.registrar_empresa("   ", "Gupy", "Sorocaba")
+    assert deposito.empresas_do_corredor("Gupy") == []

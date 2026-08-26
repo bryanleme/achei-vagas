@@ -61,7 +61,7 @@ _MODALIDADE = {
 }
 
 
-def _converter(item: dict, termo: str):
+def _converter(item: dict, termo_busca: str = ""):
     return montar(
         titulo=item.get("name", ""),
         empresa=item.get("careerPageName", ""),
@@ -78,7 +78,7 @@ def _converter(item: dict, termo: str):
         # filtro lê só o título, de propósito), mas descartar seria jogar
         # fora o único texto de requisito que o projeto tem de graça.
         descricao=item.get("description", "") or "",
-        termo_busca=termo,
+        termo_busca=termo_busca,
     )
 
 
@@ -120,7 +120,7 @@ class Gupy(Fonte):
                 itens = dados.get("data") or []
 
                 for item in itens:
-                    vaga = _converter(item, termo)
+                    vaga = _converter(item, termo_busca=termo)
                     if vaga and vaga.link not in vistos:
                         vistos.add(vaga.link)
                         vagas.append(vaga)

@@ -56,6 +56,14 @@ CREATE TABLE IF NOT EXISTS vagas (
 CREATE INDEX IF NOT EXISTS idx_vagas_chave_secundaria ON vagas(chave_secundaria);
 CREATE INDEX IF NOT EXISTS idx_vagas_digest ON vagas(digest_pendente);
 
+CREATE TABLE IF NOT EXISTS empresas (
+    nome        TEXT PRIMARY KEY,
+    fonte       TEXT NOT NULL,
+    cidade      TEXT,
+    vista_em    TEXT NOT NULL,
+    aparicoes   INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS metadados (
     chave  TEXT PRIMARY KEY,
     valor  TEXT NOT NULL
@@ -256,6 +264,61 @@ def ja_feito_hoje(chave: str, hoje: date | None = None) -> bool:
     """
     hoje = hoje or datetime.now(timezone.utc).date()
     return ler(chave) == hoje.isoformat()
+
+
+def registrar_empresa(nome: str, fonte: str, cidade: str) -> None:
+    """Anota que esta empresa publicou vaga numa cidade do corredor.
+
+    Registrada pela CIDADE, nunca pelo cargo — inclusive quando a vaga que a
+    revelou foi reprovada no filtro. Uma metalúrgica de Tatuí que hoje
+    publicou "Soldador" é exatamente a empresa que mês que vem publica
+    "Analista de PCP"; filtrar a descoberta por cargo descartaria as
+    empresas certas por causa da vaga errada.
+
+    `fonte` é obrigatória, e é o campo que corrige um erro real que este
+    código já cometeu. Nome de empresa NÃO é identificador universal: cada
+    portal escreve o seu jeito. A varredura por empresa da Gupy consulta por
+    `careerPageName`, que só bate com o nome exato que a PRÓPRIA Gupy usa —
+    MEDIDO: "Grupo Caio" (vindo da Gupy) devolve 44 vagas, e "Yazaki do
+    Brasil Ltda." (vindo do Vagas.com) devolve ZERO, porque na Gupy essa
+    empresa não se chama assim. Guardar de onde veio o nome é o que impede
+    consultar um portal com o vocabulário de outro.
+    """
+    nome = (nome or "").strip()
+    if not nome:
+        return
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO empresas (nome, fonte, cidade, vista_em) VALUES (?,?,?,?) "
+            "ON CONFLICT(nome) DO UPDATE SET "
+            " vista_em = excluded.vista_em,"
+            " cidade = excluded.cidade,"
+            " aparicoes = aparicoes + 1",
+            (nome, fonte, cidade, datetime.now(timezone.utc).isoformat(timespec="seconds")),
+        )
+
+
+def empresas_do_corredor(fonte: str, limite: int = 60) -> list[str]:
+    """As empresas daquela fonte, vistas mais recentemente primeiro.
+
+    `fonte` não tem default de propósito: consultar um portal com nome de
+    empresa colhido de outro devolve zero em silêncio, que é o pior tipo de
+    falha — parece "não há vaga" e é "perguntei errado".
+
+    Recência antes de frequência: empresa que publicou na região esta semana
+    tem mais chance de publicar de novo que uma que apareceu uma vez há seis
+    meses. O teto existe pra a lista, que cresce sozinha, não virar centenas
+    de requisições por execução.
+    """
+    with _conectar() as conn:
+        return [
+            linha[0]
+            for linha in conn.execute(
+                "SELECT nome FROM empresas WHERE fonte = ? "
+                "ORDER BY vista_em DESC, aparicoes DESC LIMIT ?",
+                (fonte, limite),
+            )
+        ]
 
 
 def registrar_feedback(vaga_id: str, feedback: str) -> bool:

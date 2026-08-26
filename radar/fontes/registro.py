@@ -22,6 +22,7 @@ from radar import config
 from radar.fontes import portais, remotas
 from radar.fontes.base import Cadencia, Fonte
 from radar.fontes.gupy import Gupy
+from radar.fontes.gupy_empresas import GupyPorEmpresa
 from radar.fontes.linkedin import LinkedIn
 
 
@@ -30,6 +31,12 @@ def fontes_ativas() -> list[Fonte]:
         # A fonte que importa. ATS da indústria brasileira, API JSON com
         # cidade/estado/modalidade/data em campo próprio.
         Gupy(estado=config.ESTADO_BUSCA),
+
+        # Varredura por EMPRESA, independente do rodizio de termos: pega
+        # tudo que as empresas do corredor abriram, sem esperar o termo
+        # certo chegar a vez. A lista se monta sozinha -- ver
+        # gupy_empresas.py.
+        GupyPorEmpresa(),
 
         # Portais brasileiros generalistas, todos por HTML servido — sem
         # navegador. Cobrem a empresa que não usa Gupy.
