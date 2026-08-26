@@ -1,0 +1,45 @@
+name: Testes
+
+on:
+  push:
+    branches: [main]
+    # O robô commita o banco a cada ciclo. Rodar a suíte inteira nesses
+    # commits gastaria minuto de Actions sem responder nenhuma pergunta:
+    # eles nunca tocam código (o passo de salvar falha se tocar).
+    paths-ignore:
+      - "data/**"
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Rodar os testes
+        run: python -m pytest -q
+
+      - name: Conferir que o ciclo monta sem tocar a rede
+        # Não busca vaga nenhuma: só prova que as fontes, o filtro e os
+        # alertas se importam entre si sem erro. Um `import` quebrado só
+        # apareceria às 3 da manhã sem este passo.
+        run: |
+          python - <<'PY'
+          from radar import ciclo
+          from radar.fontes import registro
+          fontes = registro.fontes_ativas()
+          regras = ciclo.regras_do_perfil()
+          print(f"{len(fontes)} fonte(s) ativa(s): {[f.nome for f in fontes]}")
+          print(f"{len(regras.cargos_fortes)} cargo(s) forte(s), "
+                f"{len(regras.cidades)} cidade(s).")
+          assert fontes and regras.cargos_fortes and regras.cidades
+          PY

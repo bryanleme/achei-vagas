@@ -1,0 +1,131 @@
+name: Radar
+
+on:
+  schedule:
+    # A cada 3 horas. O ciclo leva menos de 1 minuto hoje (só fontes de API),
+    # então o intervalo é sobre com que frequência você quer ser avisado, não
+    # sobre custo de máquina.
+    - cron: "0 */3 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: radar
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  ciclo:
+    runs-on: ubuntu-latest
+    # O padrão do GitHub Actions é 6 horas. Uma fonte travada consumiria isso
+    # inteiro a cada execução e, com cancel-in-progress:false, ainda
+    # bloquearia o ciclo seguinte na fila. 20 minutos é folga larga sobre a
+    # duração medida e fica muito abaixo do intervalo do cron.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Conferir que o banco veio no checkout
+        # Falha CEDO e clara. Se o banco não vier, o ciclo rodaria com
+        # histórico vazio e renotificaria tudo — centenas de mensagens
+        # repetidas no Telegram. O código também tem essa guarda
+        # (deposito.BancoSuspeito), e ela existir nos dois lugares é de
+        # propósito: aqui o erro aparece antes de qualquer requisição.
+        run: |
+          if [ ! -f data/vagas.db ]; then
+            echo "::error::data/vagas.db não está no repositório."
+            echo "Rodar assim renotificaria todo o histórico. Abortando."
+            exit 1
+          fi
+          echo "Banco encontrado: $(du -h data/vagas.db | cut -f1)"
+
+      - name: Rodar o ciclo
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py
+
+      - name: Salvar as vagas vistas
+        # ---------------------------------------------------------------
+        # ESTE PASSO JÁ REVERTEU CÓDIGO EM PRODUÇÃO. Leia antes de mudar.
+        #
+        # A versão original usava, pra reenviar quando o push era recusado:
+        #
+        #     git rebase origin/main -X theirs
+        #
+        # Numa madrugada o histórico do repositório foi reescrito enquanto
+        # uma execução estava no ar. Ao ser recusada, ela caiu nesse rebase
+        # e REAPLICOU commits antigos por cima do estado novo, com "-X
+        # theirs" resolvendo cada conflito a favor da versão do robô.
+        # Resultado: dois arquivos de código voltaram atrás, duas correções
+        # foram desfeitas em produção e 13 testes passaram a falhar —
+        # descoberto só quando a notificação da manhã não chegou.
+        #
+        # A correção não ajusta o comportamento da mesclagem. Torna a classe
+        # inteira de falha IMPOSSÍVEL: em vez de REAPLICAR commits em cima
+        # do estado remoto, o robô ADOTA o estado remoto e recoloca só o
+        # banco por cima. Reaplicar commit pode trazer junto qualquer coisa
+        # que estava naquele commit; recolocar um arquivo não pode.
+        #
+        # Efeito colateral bom: correção de código enviada por você no meio
+        # de um ciclo passa a ser INCORPORADA pelo robô, em vez de disputar
+        # com ele.
+        # ---------------------------------------------------------------
+        run: |
+          set -euo pipefail
+
+          git config user.name "radar-bot"
+          git config user.email "radar-bot@users.noreply.github.com"
+
+          # Guarda o banco FORA da árvore de trabalho — o reset --hard
+          # abaixo apagaria a versão deste ciclo.
+          cp data/vagas.db "$RUNNER_TEMP/vagas.db"
+
+          tentativa=0
+          until [ "$tentativa" -ge 5 ]; do
+            tentativa=$((tentativa + 1))
+
+            git fetch origin main
+            git reset --hard origin/main
+
+            mkdir -p data
+            cp "$RUNNER_TEMP/vagas.db" data/vagas.db
+
+            git add -- data/vagas.db
+            if git diff --cached --quiet; then
+              echo "Nenhuma vaga nova — nada a salvar."
+              exit 0
+            fi
+
+            # Garantia dura: este commit toca data/vagas.db e mais nada.
+            # Se um dia tocar, o passo falha em vez de enviar.
+            arquivos=$(git diff --cached --name-only)
+            if [ "$arquivos" != "data/vagas.db" ]; then
+              echo "::error::O robô tentou commitar além do banco:"
+              echo "$arquivos"
+              exit 1
+            fi
+
+            git commit -m "chore: atualiza vagas vistas [skip ci]"
+
+            if git push; then
+              echo "Salvo na tentativa $tentativa."
+              exit 0
+            fi
+
+            echo "Push recusado (alguém enviou antes). Sincronizando..."
+            sleep $((RANDOM % 5 + 2))
+          done
+
+          echo "::error::Push falhou depois de 5 tentativas."
+          exit 1
