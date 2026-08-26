@@ -188,3 +188,25 @@ def test_com_empresa_a_segunda_chave_volta_a_valer():
     b = vaga(empresa="Yazaki", link="https://vagas.com.br/2")
     _guardar(a)
     assert deposito.ja_vista(b) is True
+
+
+def test_varredura_inicial_segura_o_alerta_imediato():
+    """MEDIDO no SEGUNDO ciclo em produção: 15 alertas imediatos de uma vez.
+    Nenhum era erro — eram vagas reais, novas para o banco. Mas "nova para o
+    banco" não é "nova no mundo": elas já estavam publicadas, e só apareceram
+    porque o rodízio chegou nos termos "transportes" e "suprimentos".
+
+    A guarda de estreia cobria só o primeiro ciclo e resolveu metade do
+    problema. Enquanto a varredura inicial não termina, todo ciclo é uma
+    pequena estreia.
+    """
+    assert ciclo.em_varredura_inicial() is True
+
+    resto = [t for t in config.TERMOS_BUSCA if t not in config.TERMOS_PRIORITARIOS]
+    ciclos = -(-len(resto) // config.TERMOS_POR_CICLO)
+    for _ in range(ciclos):
+        ciclo.termos_do_ciclo()
+
+    assert ciclo.em_varredura_inicial() is False, (
+        "depois de cobrir todos os termos, o alerta imediato precisa ligar"
+    )

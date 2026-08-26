@@ -26,6 +26,7 @@ from radar.log import logger
 from radar.relevancia import pontuar
 
 CHAVE_RODIZIO = "rodizio_offset"
+CHAVE_VOLTAS = "rodizio_voltas"
 CHAVE_BATIMENTO = "batimento_ultimo_dia"
 CHAVE_DIGEST = "digest_ultimo_dia"
 CHAVE_FONTES_DIARIAS = "fontes_diarias_ultimo_dia"
@@ -74,9 +75,36 @@ def termos_do_ciclo() -> list[str]:
     tamanho = min(config.TERMOS_POR_CICLO, len(resto))
 
     bloco = [resto[(offset + i) % len(resto)] for i in range(tamanho)]
-    deposito.gravar(CHAVE_RODIZIO, str((offset + tamanho) % len(resto)))
+
+    novo_offset = (offset + tamanho) % len(resto)
+    deposito.gravar(CHAVE_RODIZIO, str(novo_offset))
+    # O bloco deu a volta: a lista inteira ja foi buscada pelo menos uma vez.
+    if novo_offset <= offset:
+        voltas = int(deposito.ler(CHAVE_VOLTAS) or 0)
+        deposito.gravar(CHAVE_VOLTAS, str(voltas + 1))
 
     return prioritarios + bloco
+
+
+def em_varredura_inicial() -> bool:
+    """O rodizio ainda nao cobriu a lista de termos uma vez inteira.
+
+    MEDIDO no SEGUNDO ciclo em producao: chegaram 15 alertas imediatos de
+    uma vez. Nenhum era erro -- eram vagas reais, novas para o banco. Mas
+    novas para o banco nao e o mesmo que novas no mundo: elas ja estavam
+    publicadas, e so apareceram agora porque o rodizio finalmente chegou nos
+    termos "transportes", "suprimentos" e "logistica".
+
+    A guarda de estreia cobria so o primeiro ciclo, e por isso resolveu
+    metade do problema. Enquanto a varredura inicial nao termina, TODO ciclo
+    e uma pequena estreia: descobre um lote que sempre esteve la.
+
+    Com 43 termos e 10 por ciclo, a varredura leva cerca de 5 ciclos --
+    aproximadamente 15 horas. Ate la tudo vai pro resumo. Depois disso
+    "vaga nova" passa a significar de verdade "publicada desde o ultimo
+    ciclo", que e a unica coisa que merece interromper o seu dia.
+    """
+    return int(deposito.ler(CHAVE_VOLTAS) or 0) < 1
 
 
 # ---------------------------------------------------------------------------
@@ -200,11 +228,12 @@ async def rodar(so_teste: bool = False) -> dict:
     #
     # Um resumo único, ranqueado, entrega a mesma informação melhor. Do
     # segundo ciclo em diante o comportamento normal volta sozinho.
-    estreia = deposito.estatisticas()["total"] == 0
+    estreia = em_varredura_inicial()
     if estreia:
         logger.info(
-            "Primeira execução: banco vazio, então nada alerta na hora — "
-            "tudo entra no resumo, ranqueado."
+            "Varredura inicial em andamento: nada alerta na hora, tudo entra "
+            "no resumo. Alerta imediato liga quando o rodízio cobrir todos os "
+            "termos uma vez."
         )
 
     if not so_teste:
