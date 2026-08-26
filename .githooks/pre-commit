@@ -1,0 +1,40 @@
+#!/bin/sh
+# Impede que credencial entre num commit.
+#
+# A trava em CI (tests/test_segredos.py) pega o vazamento DEPOIS do push --
+# e depois do push ja e tarde: o token esta no historico, em todo clone, e a
+# unica correcao de verdade e revogar. Este gancho pega antes.
+#
+# Instalar (uma vez, por clone):   git config core.hooksPath .githooks
+
+encontrados=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$encontrados" ] && exit 0
+
+falhou=0
+for arquivo in $encontrados; do
+  case "$arquivo" in
+    *.db|*.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip) continue ;;
+  esac
+  [ -f "$arquivo" ] || continue
+
+  if git show ":$arquivo" 2>/dev/null | grep -qE '[0-9]{8,12}:AA[A-Za-z0-9_-]{32,34}'; then
+    echo "ERRO: token do Telegram em $arquivo"
+    falhou=1
+  fi
+  if git show ":$arquivo" 2>/dev/null | grep -qE '(ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'; then
+    echo "ERRO: credencial em $arquivo"
+    falhou=1
+  fi
+done
+
+if echo "$encontrados" | grep -qx '.env'; then
+  echo "ERRO: .env nao pode ser commitado."
+  falhou=1
+fi
+
+if [ "$falhou" -eq 1 ]; then
+  echo ""
+  echo "Commit bloqueado. Tire o segredo do arquivo e use .env (ignorado pelo git)."
+  exit 1
+fi
+exit 0

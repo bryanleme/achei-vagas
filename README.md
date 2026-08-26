@@ -157,6 +157,33 @@ outra forma pareceriam paranoia:
    vazio a cada execução, toda vaga virando "nova" e renotificando a cada 3
    horas.
 
+## Segredos
+
+O token do bot fica **só no `.env`**, que é ignorado pelo git, e nas secrets
+do repositório. Nunca em arquivo rastreado.
+
+Isso não depende de ninguém lembrar — o projeto verifica sozinho, em duas
+camadas:
+
+- `tests/test_segredos.py` roda em CI a cada push e falha se qualquer arquivo
+  rastreado contiver token do Telegram, token do GitHub, chave da AWS ou chave
+  privada, ou se o `.env` for adicionado ao git;
+- `.githooks/pre-commit` pega antes do commit, que é onde importa. Instale uma
+  vez por clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+As duas camadas existem porque o CI só reclama **depois** do push, e depois do
+push já é tarde: token commitado fica no histórico de todo clone e de todo
+fork mesmo depois de removido do arquivo. A única correção de verdade passa a
+ser revogar o token. Repositório privado não muda isso — basta virar público
+um dia, ou ganhar um colaborador.
+
+Verificado por mutação: um arquivo com token de mentira é recusado pelo gancho
+e quebra o teste.
+
 ## Ajustar
 
 Tudo que define *o que* procurar está em `radar/config.py`, e nada além de
