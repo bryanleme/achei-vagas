@@ -22,6 +22,7 @@ from radar import config
 from radar.fontes import portais, remotas
 from radar.fontes.base import Cadencia, Fonte
 from radar.fontes.gupy import Gupy
+from radar.fontes.linkedin import LinkedIn
 
 
 def fontes_ativas() -> list[Fonte]:
@@ -32,6 +33,10 @@ def fontes_ativas() -> list[Fonte]:
 
         # Portais brasileiros generalistas, todos por HTML servido — sem
         # navegador. Cobrem a empresa que não usa Gupy.
+        # LinkedIn pelo endpoint de convidado, via geoId (location=texto
+        # falha em SILÊNCIO e devolve resultado dos EUA — ver linkedin.py).
+        LinkedIn(),
+
         portais.VagasCom(),
         portais.InfoJobs(),
         portais.Catho(uf=config.UF_BUSCA.lower(), estado="sao-paulo"),

@@ -153,6 +153,27 @@ def _primeiro_ciclo_do_dia(agora: datetime) -> bool:
     return not ja
 
 
+
+async def _buscar_termos(fonte, termos: list[str]) -> list[Resultado]:
+    """Roda os termos de uma fonte respeitando o teto dela."""
+    if not fonte.max_simultaneas:
+        return await asyncio.gather(*[com_protecao(fonte, t) for t in termos])
+
+    porteiro = asyncio.Semaphore(fonte.max_simultaneas)
+
+    async def _uma(termo: str) -> Resultado:
+        async with porteiro:
+            resultado = await com_protecao(fonte, termo)
+            if fonte.pausa:
+                # Dentro do semáforo de propósito: a pausa só vale se o
+                # próximo termo esperar por ela. Fora, todos dormiriam
+                # juntos e a rajada aconteceria do mesmo jeito.
+                await asyncio.sleep(fonte.pausa)
+            return resultado
+
+    return await asyncio.gather(*[_uma(t) for t in termos])
+
+
 # ---------------------------------------------------------------------------
 # O ciclo
 # ---------------------------------------------------------------------------
@@ -163,6 +184,28 @@ async def rodar(so_teste: bool = False) -> dict:
     regras = regras_do_perfil()
 
     deposito.iniciar()
+
+    # PRIMEIRA EXECUÇÃO: nada alerta na hora, tudo vai pro resumo.
+    #
+    # Com o banco vazio, TODA vaga que existe hoje nos portais é "nova" — o
+    # ciclo de estreia encontra dezenas de uma vez. Sem esta guarda, todas as
+    # que passam do limiar viram alerta imediato e chegam juntas: vinte e
+    # tantas mensagens seguidas, num dia em que nenhuma delas é urgente (elas
+    # já estavam lá antes de o robô existir).
+    #
+    # O custo de errar aqui não é só incômodo. Alerta imediato que chega em
+    # rajada ensina a ignorar alerta imediato, e aí ele para de funcionar
+    # justamente quando passar a significar alguma coisa.
+    #
+    # Um resumo único, ranqueado, entrega a mesma informação melhor. Do
+    # segundo ciclo em diante o comportamento normal volta sozinho.
+    estreia = deposito.estatisticas()["total"] == 0
+    if estreia:
+        logger.info(
+            "Primeira execução: banco vazio, então nada alerta na hora — "
+            "tudo entra no resumo, ranqueado."
+        )
+
     if not so_teste:
         processados = telegram.processar_feedback(deposito)
         if processados:
@@ -186,12 +229,14 @@ async def rodar(so_teste: bool = False) -> dict:
     ja_notificadas: set[str] = set()
 
     for fonte in fontes:
-        # Todos os termos da fonte em paralelo. O gargalo aqui é rede, não
-        # CPU — esperar uma resposta de cada vez multiplicaria o tempo do
-        # ciclo pelo número de termos sem nenhum ganho.
-        resultados: list[Resultado] = await asyncio.gather(
-            *[com_protecao(fonte, termo) for termo in termos]
-        )
+        # Termos em paralelo — o gargalo é rede, não CPU, e esperar uma
+        # resposta de cada vez multiplicaria o ciclo pelo número de termos.
+        #
+        # Com teto por fonte, e o teto não é excesso de zelo. MEDIDO: uma
+        # busca isolada no LinkedIn responde 200; os 15 termos disparados de
+        # uma vez falharam TODOS por limite de taxa. Fonte que precisa de
+        # calma declara `max_simultaneas` e `pausa` — ver fontes/base.py.
+        resultados: list[Resultado] = await _buscar_termos(fonte, termos)
 
         falhas = sum(1 for r in resultados if r.falhou)
         vagas_da_fonte = [v for r in resultados for v in r.vagas]
@@ -258,7 +303,11 @@ async def rodar(so_teste: bool = False) -> dict:
                 dias_vaga_antiga=config.DIAS_PARA_VAGA_ANTIGA,
             )
             antiga = vaga.antiga(config.DIAS_PARA_VAGA_ANTIGA)
-            imediata = nota.total >= config.LIMIAR_ALERTA_IMEDIATO and not antiga
+            imediata = (
+                nota.total >= config.LIMIAR_ALERTA_IMEDIATO
+                and not antiga
+                and not estreia
+            )
 
             if so_teste:
                 logger.info(

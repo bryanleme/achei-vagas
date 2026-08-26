@@ -13,6 +13,7 @@ estendia o ciclo em 19 minutos entregando zero vaga.
 """
 
 import asyncio
+import time
 from dataclasses import dataclass
 from enum import Enum
 
@@ -78,11 +79,72 @@ class Fonte:
     # não do filtro.
     exige_mercado_declarado: bool = False
 
+    # Quantas buscas desta fonte podem estar no ar ao mesmo tempo.
+    # 0 = sem limite (o padrão: API pública aguenta a rajada).
+    #
+    # MEDIDO na primeira execução com o LinkedIn ligado: uma busca isolada
+    # respondia 200, mas os 15 termos disparados de uma vez falharam TODOS.
+    # Não é o endpoint estar errado — é limite de taxa. A diferença entre os
+    # dois diagnósticos é o dia inteiro de investigação que este comentário
+    # economiza.
+    max_simultaneas: int = 0
+
+    # Pausa em segundos entre requisições sequenciais da mesma fonte.
+    pausa: float = 0.0
+
     async def buscar(self, termo: str, navegador=None) -> Resultado:
         raise NotImplementedError
 
     def __repr__(self) -> str:
         return f"<Fonte {self.nome}>"
+
+
+# Quantas vezes reenviar quando a resposta é 429 (limite de taxa) ou 5xx.
+TENTATIVAS = 3
+
+# Espera entre tentativas, dobrando a cada vez: 2s, 4s.
+ESPERA_BASE = 2.0
+
+_STATUS_QUE_VALE_REPETIR = {429, 500, 502, 503, 504}
+
+
+def _requisitar(url: str, params, headers) -> requests.Response:
+    """GET com reenvio no que é temporário — e só no que é temporário.
+
+    429 quer dizer "você está indo rápido demais, espere". Tratar isso como
+    falha definitiva é desistir de uma resposta que o servidor está disposto
+    a dar: MEDIDO no LinkedIn, 4 dos 15 termos de um ciclo voltavam 429
+    mesmo já serializados, e cada um era uma busca inteira perdida.
+
+    404 e 403 NÃO são repetidos de propósito. 404 é endpoint errado e 403 é
+    bloqueio — repetir os dois só gasta tempo e, no caso do 403, insiste
+    exatamente onde já disseram não.
+    """
+    espera = ESPERA_BASE
+    ultima: requests.Response | None = None
+
+    for tentativa in range(TENTATIVAS):
+        resposta = requests.get(url, params=params, headers=headers, timeout=TIMEOUT_HTTP)
+        if resposta.status_code not in _STATUS_QUE_VALE_REPETIR:
+            resposta.raise_for_status()
+            return resposta
+
+        ultima = resposta
+        if tentativa < TENTATIVAS - 1:
+            # `Retry-After`, quando vem, é o próprio servidor dizendo quanto
+            # esperar. Ignorar isso e usar a nossa conta é adivinhar tendo a
+            # resposta na mão.
+            sugerido = resposta.headers.get("Retry-After")
+            try:
+                pausa = min(float(sugerido), 30.0) if sugerido else espera
+            except ValueError:
+                pausa = espera
+            time.sleep(pausa)
+            espera *= 2
+
+    assert ultima is not None
+    ultima.raise_for_status()
+    return ultima
 
 
 async def get_json(url: str, params: dict | None = None, headers: dict | None = None):
@@ -99,11 +161,7 @@ async def get_json(url: str, params: dict | None = None, headers: dict | None = 
         cabecalhos.update(headers)
 
     def _buscar():
-        resposta = requests.get(
-            url, params=params, headers=cabecalhos, timeout=TIMEOUT_HTTP
-        )
-        resposta.raise_for_status()
-        return resposta.json()
+        return _requisitar(url, params, cabecalhos).json()
 
     return await asyncio.to_thread(_buscar)
 
@@ -127,15 +185,10 @@ async def get_html(url: str, params: dict | None = None):
     """
     from bs4 import BeautifulSoup
 
+    cabecalhos = {"User-Agent": UA, "Accept-Language": "pt-BR,pt;q=0.9"}
+
     def _buscar():
-        resposta = requests.get(
-            url,
-            params=params,
-            headers={"User-Agent": UA, "Accept-Language": "pt-BR,pt;q=0.9"},
-            timeout=TIMEOUT_HTTP,
-        )
-        resposta.raise_for_status()
-        return BeautifulSoup(resposta.text, "lxml")
+        return BeautifulSoup(_requisitar(url, params, cabecalhos).text, "lxml")
 
     return await asyncio.to_thread(_buscar)
 
@@ -176,9 +229,19 @@ async def com_protecao(fonte: "Fonte", termo: str, navegador=None) -> Resultado:
     """
     try:
         return await fonte.buscar(termo, navegador)
+    except requests.HTTPError as e:
+        # O STATUS importa e o tipo sozinho não diz nada. 429 é limite de
+        # taxa (baixar a concorrência); 403 é bloqueio (a fonte sai); 404 é
+        # endpoint errado (corrigir o código). Registrar só "HTTPError"
+        # transforma os três no mesmo bilhete sem informação.
+        #
+        # O status vem de `e.response` e não contém URL nem credencial. A
+        # exceção CRUA conteria: a mensagem padrão do requests inclui a URL
+        # completa que falhou, e URL de API pode carregar chave.
+        status = e.response.status_code if e.response is not None else "?"
+        logger.warning("[%s] falhou em '%s': HTTP %s", fonte.nome, termo, status)
+        return Resultado(vagas=[], falhou=True, detalhe=f"HTTP {status}")
     except Exception as e:
-        # Só o tipo e uma mensagem curta: mensagem de erro de rede costuma
-        # trazer a URL inteira, e URL de API pode conter chave.
         logger.warning("[%s] falhou em '%s': %s", fonte.nome, termo, type(e).__name__)
         return Resultado(vagas=[], falhou=True, detalhe=type(e).__name__)
 

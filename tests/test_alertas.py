@@ -190,3 +190,32 @@ def test_callback_desconhecido_nao_vira_feedback(data):
     """O botão de confirmação que substitui o teclado depois do clique usa
     'fb|ok|-' de propósito: ele não pode ser lido como voto novo."""
     assert telegram.parsear_callback(data) is None
+
+
+# ===========================================================================
+# A rajada da estreia
+# ===========================================================================
+
+def test_estreia_manda_tudo_pro_resumo(monkeypatch):
+    """Com o banco vazio, TODA vaga que existe hoje nos portais é "nova" — o
+    ciclo de estreia encontra dezenas de uma vez. Sem guarda, todas as que
+    passam do limiar viram alerta imediato e chegam juntas.
+
+    Alerta imediato que chega em rajada ensina a ignorar alerta imediato, e
+    aí ele para de funcionar justamente quando passar a significar algo.
+    """
+    import inspect
+
+    fonte = inspect.getsource(ciclo.rodar)
+    assert "estreia" in fonte
+    assert "and not estreia" in fonte
+    assert deposito.estatisticas()["total"] == 0
+
+
+def test_depois_da_estreia_o_alerta_imediato_volta():
+    """A guarda não pode virar permanente: basta uma vaga no banco pra o
+    comportamento normal voltar."""
+    from tests.conftest import vaga
+
+    deposito.salvar(vaga(), 8, "cargo direto", digest_pendente=False)
+    assert deposito.estatisticas()["total"] == 1
