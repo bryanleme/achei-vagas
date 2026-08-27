@@ -311,6 +311,7 @@ CIDADES_REGIAO = [
     "Tietê",
     "Votorantim",
     "Alumínio",
+    "Itu",
     # Já estavam no radar antes desta lista e ficam: mesmo corredor, mesma
     # distância. Tire daqui se não quiser mais.
     "Porto Feliz",
@@ -332,7 +333,6 @@ CIDADES_DISTANTES = [
     "São Paulo",
     "Campinas",
     "Cotia",
-    "Itu",
     "São Roque",
     "Vargem Grande Paulista",
 ]
