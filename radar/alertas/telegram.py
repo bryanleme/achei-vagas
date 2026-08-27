@@ -26,6 +26,18 @@ _API = "https://api.telegram.org/bot{token}/{metodo}"
 # cabeçalho e pra acentuação, que ocupa mais de um byte por caractere.
 LIMITE_MENSAGEM = 3500
 
+# Teto de vagas no resumo. Resumo é resumo.
+#
+# MEDIDO em produção: uma fila de 382 vagas virou 25 mensagens seguidas no
+# Telegram. Isso é pior que o problema que o resumo existe pra resolver — a
+# guarda de estreia foi escrita justamente pra evitar rajada de notificação, e
+# o próprio resumo virou a rajada.
+#
+# 40 cabe em ~3 mensagens e é mais do que alguém lê de uma sentada. As vagas
+# que ficam de fora são, por definição, as de MENOR relevância da fila (ela
+# vem ordenada), continuam no banco e saem em `--estado`. Nenhuma some.
+LIMITE_VAGAS_DIGEST = 40
+
 
 def configurado() -> bool:
     return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
@@ -209,6 +221,9 @@ def montar_digest(vagas: list[tuple]) -> list[str]:
     if not vagas:
         return []
 
+    total = len(vagas)
+    vagas = vagas[:LIMITE_VAGAS_DIGEST]
+
     linhas = [
         f'{estrelas(rel or 0)} <a href="{link}">{titulo}</a>\n'
         f'    {empresa or "empresa não informada"} · '
@@ -230,7 +245,11 @@ def montar_digest(vagas: list[tuple]) -> list[str]:
 
     mensagens = []
     for i, parte in enumerate(partes, start=1):
-        cabecalho = f"📋 <b>Resumo do dia</b> — {len(vagas)} vaga(s)"
+        if total > len(vagas):
+            cabecalho = (f"📋 <b>Resumo do dia</b> — as {len(vagas)} melhores "
+                         f"de {total}")
+        else:
+            cabecalho = f"📋 <b>Resumo do dia</b> — {total} vaga(s)"
         if len(partes) > 1:
             cabecalho += f" · parte {i}/{len(partes)}"
         mensagens.append(cabecalho + "\n\n" + "\n\n".join(parte))

@@ -605,3 +605,70 @@ def test_a3_extracao_nao_mutila_o_card():
     el = card.select_one("div.vaga-local")
     texto_sem(el, ".tooltip-place")
     assert card.select_one(".tooltip-place") is not None, "o card foi mutilado"
+
+
+# ===========================================================================
+# E4 — o nome do estado casando como nome de cidade
+# ===========================================================================
+
+@pytest.mark.parametrize(
+    "local",
+    [
+        "Lorena, São Paulo, Brasil",
+        "Jaguariúna, São Paulo, Brasil",
+        "São Bernardo do Campo, São Paulo, Brasil",
+        "Mogi Guaçu, São Paulo, Brasil",
+        "Taboão da Serra, São Paulo, Brasil",
+        "Barueri, São Paulo, Brasil",
+    ],
+)
+def test_e4_estado_no_texto_nao_vira_a_cidade(local, regras):
+    """MEDIDO em produção: o estado inteiro de São Paulo estava passando.
+
+    A Gupy entrega o local como "cidade, ESTADO, país" — "Lorena, São Paulo,
+    Brasil". Enquanto a capital não estava na lista de cidades aceitas isso
+    não fazia diferença. Quando ela entrou, o nome do ESTADO passou a casar
+    como se fosse o nome da CIDADE, e toda vaga do estado virou "São Paulo",
+    com nota 8/10.
+
+    Nome de cidade e nome de estado são iguais em São Paulo, no Rio e em
+    vários outros. Substring não distingue os dois; POSIÇÃO distingue.
+    """
+    from radar import config
+    from radar.localizacao import bate_cidade
+
+    assert bate_cidade(local, config.CIDADES, "SP") is None
+    assert combina(vaga(titulo="Analista de PCP", local=local), regras) is False
+
+
+def test_e4_a_capital_de_verdade_continua_passando():
+    """Só UMA ocorrência do estado é descartada, e é a última: "São Paulo, São
+    Paulo, Brasil" é a capital mesmo."""
+    from radar import config
+    from radar.localizacao import bate_cidade
+
+    assert bate_cidade("São Paulo, São Paulo, Brasil", config.CIDADES, "SP") == "São Paulo"
+    assert bate_cidade("São Paulo, SP", config.CIDADES, "SP") == "São Paulo"
+    assert bate_cidade("São Paulo e Região", config.CIDADES, "SP") == "São Paulo"
+
+
+@pytest.mark.parametrize(
+    "local,esperado",
+    [
+        ("Sorocaba, São Paulo, Brasil", "Sorocaba"),
+        ("Itapetininga, São Paulo, Brasil", "Itapetininga"),
+        ("Sorocaba - SP", "Sorocaba"),
+        ("Tatuí / SP", "Tatuí"),
+        ("Salto de Pirapora / SP", "Salto de Pirapora"),
+        ("Itapetininga", "Itapetininga"),
+        ("Campinas e Região", "Campinas"),
+    ],
+)
+def test_e4_cidade_de_verdade_nao_foi_quebrada(local, esperado):
+    """A correção não pode ter fechado nenhum dos formatos reais que já
+    funcionavam — inclusive cidade com espaço no nome, que não pode ser
+    partida pelo separador."""
+    from radar import config
+    from radar.localizacao import bate_cidade
+
+    assert bate_cidade(local, config.CIDADES, "SP") == esperado

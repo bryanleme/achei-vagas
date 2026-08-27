@@ -219,13 +219,62 @@ def cidade_confere(local: str, uf_esperada: str) -> bool:
     return declarada == normalizar(uf_esperada)
 
 
+# Separadores que as fontes usam entre cidade, estado e país. " - " exige os
+# espaços: "Salto de Pirapora" não pode ser partido, "Sorocaba - SP" sim.
+_PARTES_LOCAL = re.compile(r"\s*[,/|]\s*|\s+-\s+")
+
+_PALAVRAS_PAIS = {"brasil", "brazil", "br"}
+
+
+def _segmentos_de_cidade(local: str) -> list[str]:
+    """Os pedaços do texto de local onde uma CIDADE pode estar.
+
+    Descarta o segmento que declara o ESTADO e o que declara o país. É o
+    conserto de um furo que abriu o estado inteiro de São Paulo:
+
+    A Gupy entrega o local como "cidade, ESTADO, país" — "Lorena, São Paulo,
+    Brasil". Enquanto a capital não estava na lista de cidades aceitas, isso
+    não fazia diferença. Quando ela entrou, o nome do ESTADO passou a casar
+    como se fosse o nome da CIDADE, e toda vaga do estado de São Paulo virou
+    "São Paulo": Lorena, Jaguariúna, Mogi Guaçu, Taboão da Serra, São
+    Bernardo do Campo. MEDIDO em produção — todas entraram com nota 8/10.
+
+    Nome de cidade e nome de estado são iguais em São Paulo, no Rio e em
+    vários outros. Substring não distingue os dois; POSIÇÃO distingue.
+
+    Só UMA ocorrência do estado é descartada, e é a última: "São Paulo, São
+    Paulo, Brasil" é a capital de verdade, e precisa continuar batendo.
+    """
+    partes = [p.strip() for p in _PARTES_LOCAL.split(local or "") if p.strip()]
+    if len(partes) < 2:
+        # Texto de um pedaço só ("Sorocaba", "São Paulo e Região") não tem
+        # estado separado pra descartar.
+        return partes
+
+    uf = uf_declarada(local)
+    descartar = None
+    if uf:
+        for i in range(len(partes) - 1, -1, -1):
+            p = normalizar(partes[i])
+            if p == uf or NOME_DO_ESTADO.get(p) == uf:
+                descartar = i
+                break
+
+    return [
+        p for i, p in enumerate(partes)
+        if i != descartar and normalizar(p) not in _PALAVRAS_PAIS
+    ]
+
+
 def bate_cidade(local: str, cidades: list[str], uf_esperada: str) -> str | None:
     """Devolve o nome da cidade aceita que bate com o texto, ou None."""
-    local_norm = normalizar(local)
+    if not cidade_confere(local, uf_esperada):
+        return None
+
+    segmentos = [normalizar(s) for s in _segmentos_de_cidade(local)]
     for cidade in cidades:
-        if contem_termo(normalizar(cidade), local_norm) and cidade_confere(
-            local, uf_esperada
-        ):
+        alvo = normalizar(cidade)
+        if any(contem_termo(alvo, seg) for seg in segmentos):
             return cidade
     return None
 

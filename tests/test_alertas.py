@@ -152,20 +152,22 @@ def test_estrelas_arredondam_sempre_pra_cima(pontos, cheias):
 
 
 def test_digest_quebra_em_partes_quando_passa_do_limite():
-    """Um dia cheio passa dos 4.096 caracteres do Telegram. Estourar faz a
-    API recusar a mensagem inteira; truncar some com vaga sem ninguém saber."""
+    """Mesmo dentro do teto de vagas, o texto pode passar dos 4.096 caracteres
+    do Telegram. Estourar faz a API recusar a mensagem inteira; truncar some
+    com vaga sem ninguém saber."""
     vagas = [
-        (f"Analista de Processos {i}", "Empresa " + "X" * 40,
-         f"https://exemplo.com/{i}", 6, "Sorocaba - SP", "Gupy", "")
-        for i in range(60)
+        ("Analista de Processos e Melhoria Contínua Sênior " + "x" * 30,
+         "Empresa Com Nome Bastante Longo Industria e Comercio S.A.",
+         f"https://exemplo.com/{i}", 6, "Salto de Pirapora - SP", "Vagas.com", "")
+        for i in range(telegram.LIMITE_VAGAS_DIGEST)
     ]
     partes = telegram.montar_digest(vagas)
     assert len(partes) > 1
-    assert all(len(p) <= telegram.LIMITE_MENSAGEM + 200 for p in partes)
+    assert all(len(p) <= telegram.LIMITE_MENSAGEM + 300 for p in partes)
     assert "parte 1/" in partes[0]
-    # Nenhuma vaga pode sumir na quebra.
+    # Nenhuma das que entraram no resumo pode sumir na quebra.
     juntas = "\n".join(partes)
-    for i in range(60):
+    for i in range(telegram.LIMITE_VAGAS_DIGEST):
         assert f"https://exemplo.com/{i}" in juntas
 
 
@@ -296,3 +298,39 @@ def test_token_com_espaco_em_branco_e_aparado():
     assert config.TELEGRAM_CHAT_ID == "456"
     del os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"]
     importlib.reload(config)
+
+
+def test_resumo_nao_vira_enxurrada():
+    """MEDIDO em produção: uma fila de 382 vagas virou 25 mensagens seguidas
+    no Telegram.
+
+    Isso é pior que o problema que o resumo existe pra resolver. A guarda de
+    estreia foi escrita justamente pra evitar rajada de notificação — e o
+    próprio resumo virou a rajada.
+    """
+    vagas = [(f"Analista de Processos {i}", "Empresa Muito Longa S.A. do Brasil",
+              f"https://exemplo.com/{i}", 9 - (i % 9), "Sorocaba - SP", "Gupy", "")
+             for i in range(382)]
+    partes = telegram.montar_digest(vagas)
+    assert len(partes) <= 4, f"{len(partes)} mensagens é enxurrada"
+    assert "as 40 melhores de 382" in partes[0]
+
+
+def test_resumo_curto_nao_mente_sobre_o_total():
+    """Fila menor que o teto não pode dizer "as N melhores de N"."""
+    vagas = [(f"Analista {i}", "Empresa", f"https://exemplo.com/{i}", 8,
+              "Tatuí - SP", "Vagas.com", "") for i in range(5)]
+    partes = telegram.montar_digest(vagas)
+    assert len(partes) == 1
+    assert "5 vaga(s)" in partes[0]
+    assert "melhores" not in partes[0]
+
+
+def test_resumo_manda_as_de_maior_relevancia():
+    """A fila chega ordenada da mais relevante pra menos — o corte tem de
+    ficar com o topo, não com o que veio primeiro."""
+    vagas = ([("BOA", "E", "https://x/boa", 10, "Sorocaba", "Gupy", "")]
+             + [(f"fraca {i}", "E", f"https://x/{i}", 2, "Sorocaba", "Gupy", "")
+                for i in range(100)])
+    juntas = "\n".join(telegram.montar_digest(vagas))
+    assert "https://x/boa" in juntas
