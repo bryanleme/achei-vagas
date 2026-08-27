@@ -19,10 +19,9 @@ impressão:
 """
 
 from radar import config
-from radar.fontes import portais, remotas
+from radar.fontes import por_empresa, portais, remotas
 from radar.fontes.base import Cadencia, Fonte
 from radar.fontes.gupy import Gupy
-from radar.fontes.gupy_empresas import GupyPorEmpresa
 from radar.fontes.linkedin import LinkedIn
 
 
@@ -31,12 +30,6 @@ def fontes_ativas() -> list[Fonte]:
         # A fonte que importa. ATS da indústria brasileira, API JSON com
         # cidade/estado/modalidade/data em campo próprio.
         Gupy(estado=config.ESTADO_BUSCA),
-
-        # Varredura por EMPRESA, independente do rodizio de termos: pega
-        # tudo que as empresas do corredor abriram, sem esperar o termo
-        # certo chegar a vez. A lista se monta sozinha -- ver
-        # gupy_empresas.py.
-        GupyPorEmpresa(),
 
         # Portais brasileiros generalistas, todos por HTML servido — sem
         # navegador. Cobrem a empresa que não usa Gupy.
@@ -51,6 +44,16 @@ def fontes_ativas() -> list[Fonte]:
         # Agregadores de remoto internacional. Rendimento esperado baixo pro
         # perfil, custo quase zero. Ver o cabeçalho de remotas.py.
         *[classe() for classe in remotas.TODAS],
+
+        # POR ÚLTIMO, e a ordem importa. Estas varreduras leem a lista de
+        # empresas que as fontes acima acabaram de alimentar — postas antes,
+        # trabalhariam sempre com a lista do ciclo anterior, e no primeiro
+        # ciclo de um banco novo com lista nenhuma.
+        #
+        # Cada portal só consulta as empresas que ele mesmo descobriu: nome de
+        # empresa não é identificador universal, e "Yazaki do Brasil Ltda."
+        # (do Vagas.com) devolve zero na Gupy. Ver por_empresa.py.
+        *[classe() for classe in por_empresa.TODAS],
     ]
 
 

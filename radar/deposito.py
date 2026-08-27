@@ -59,6 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_vagas_digest ON vagas(digest_pendente);
 CREATE TABLE IF NOT EXISTS empresas (
     nome        TEXT PRIMARY KEY,
     fonte       TEXT NOT NULL,
+    url         TEXT,
     cidade      TEXT,
     vista_em    TEXT NOT NULL,
     aparicoes   INTEGER NOT NULL DEFAULT 1
@@ -266,7 +267,7 @@ def ja_feito_hoje(chave: str, hoje: date | None = None) -> bool:
     return ler(chave) == hoje.isoformat()
 
 
-def registrar_empresa(nome: str, fonte: str, cidade: str) -> None:
+def registrar_empresa(nome: str, fonte: str, cidade: str, url: str = "") -> None:
     """Anota que esta empresa publicou vaga numa cidade do corredor.
 
     Registrada pela CIDADE, nunca pelo cargo — inclusive quando a vaga que a
@@ -289,13 +290,35 @@ def registrar_empresa(nome: str, fonte: str, cidade: str) -> None:
         return
     with _conectar() as conn:
         conn.execute(
-            "INSERT INTO empresas (nome, fonte, cidade, vista_em) VALUES (?,?,?,?) "
+            "INSERT INTO empresas (nome, fonte, url, cidade, vista_em) VALUES (?,?,?,?,?) "
             "ON CONFLICT(nome) DO UPDATE SET "
             " vista_em = excluded.vista_em,"
             " cidade = excluded.cidade,"
+            # COALESCE e não sobrescrita: um card sem link não pode APAGAR o
+            # link que outro card da mesma empresa já trouxe.
+            " url = COALESCE(NULLIF(excluded.url, ''), empresas.url),"
             " aparicoes = aparicoes + 1",
-            (nome, fonte, cidade, datetime.now(timezone.utc).isoformat(timespec="seconds")),
+            (nome, fonte, url, cidade,
+             datetime.now(timezone.utc).isoformat(timespec="seconds")),
         )
+
+
+def empresas_com_url(fonte: str, limite: int = 60) -> list[tuple[str, str]]:
+    """(nome, url) das empresas daquela fonte que têm link conhecido.
+
+    Só as com link: varrer exige o endereço, e nome sem link não dá pra
+    consultar em portal que identifica empresa por id numérico.
+    """
+    with _conectar() as conn:
+        return [
+            (linha[0], linha[1])
+            for linha in conn.execute(
+                "SELECT nome, url FROM empresas "
+                "WHERE fonte = ? AND url IS NOT NULL AND url <> '' "
+                "ORDER BY vista_em DESC, aparicoes DESC LIMIT ?",
+                (fonte, limite),
+            )
+        ]
 
 
 def empresas_do_corredor(fonte: str, limite: int = 60) -> list[str]:

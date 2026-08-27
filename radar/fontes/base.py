@@ -261,6 +261,7 @@ def montar(
     publicado_em: str = "",
     descricao: str = "",
     termo_busca: str = "",
+    empresa_url: str = "",
 ) -> Vaga | None:
     """Constrói a Vaga, descartando card incompleto.
 
@@ -285,4 +286,5 @@ def montar(
         publicado_em=publicado_em or "",
         descricao=descricao or "",
         termo_busca=termo_busca,
+        empresa_url=(empresa_url or "").strip(),
     )

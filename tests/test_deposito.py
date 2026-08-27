@@ -250,3 +250,66 @@ def test_empresa_sem_nome_e_ignorada():
     deposito.registrar_empresa("", "Gupy", "Sorocaba")
     deposito.registrar_empresa("   ", "Gupy", "Sorocaba")
     assert deposito.empresas_do_corredor("Gupy") == []
+
+
+# ===========================================================================
+# Varredura por empresa
+# ===========================================================================
+
+def test_cidade_extraida_do_endereco_da_vaga_no_infojobs():
+    """A página de empresa do InfoJobs traz SÓ o título — MEDIDO, o bloco
+    inteiro é `<div class="link-item"><a>TÍTULO</a></div>`. Varredura sem
+    cidade seria inútil: vaga sem local não bate cidade nem é remota, o filtro
+    derruba tudo e o custo é gasto à toa.
+
+    A cidade está no endereço, que o portal monta como
+    `/vaga-de-<titulo>-em-<cidade>__<id>.aspx`.
+    """
+    from radar.fontes.por_empresa import InfoJobsPorEmpresa as F
+
+    assert F._cidade_do_endereco(
+        "https://www.infojobs.com.br/vaga-de-jardineiro-shopping-cidade-jardim"
+        "-em-sao-paulo__11957366.aspx") == "sao paulo"
+    assert F._cidade_do_endereco("/vaga-de-analista-de-pcp-em-sorocaba__123.aspx") == "sorocaba"
+    assert F._cidade_do_endereco(
+        "/vaga-de-analista-de-logistica-em-salto-de-pirapora__9.aspx") == "salto de pirapora"
+
+
+def test_titulo_com_em_no_meio_nao_confunde_a_cidade():
+    """Um título pode conter "em" ("analista em treinamento"); o sufixo do
+    endereço não. Por isso vale o ÚLTIMO "-em-" antes do id."""
+    from radar.fontes.por_empresa import InfoJobsPorEmpresa as F
+
+    assert F._cidade_do_endereco(
+        "/vaga-de-analista-em-treinamento-em-tatui__77.aspx") == "tatui"
+
+
+def test_endereco_sem_cidade_devolve_vazio():
+    """Vaga sem cidade no endereço não pode virar cidade inventada — devolve
+    vazio e o filtro decide."""
+    from radar.fontes.por_empresa import InfoJobsPorEmpresa as F
+
+    assert F._cidade_do_endereco("/vaga-de-analista-de-pcp__123.aspx") == ""
+    assert F._cidade_do_endereco("") == ""
+
+
+def test_cidade_extraida_bate_com_o_filtro():
+    """A extração só serve se o formato que ela produz for entendido pelo
+    filtro de cidade — que normaliza acento e caixa, mas não hífen."""
+    from radar.fontes.por_empresa import InfoJobsPorEmpresa as F
+    from radar.localizacao import bate_cidade
+
+    cidade = F._cidade_do_endereco("/vaga-de-analista-em-salto-de-pirapora__9.aspx")
+    assert bate_cidade(cidade, ["Salto de Pirapora"], "SP") == "Salto de Pirapora"
+
+
+def test_url_de_empresa_e_preservada_quando_um_card_vem_sem_ela():
+    """Card sem link de empresa não pode APAGAR o link que outro card da
+    mesma empresa já trouxe — sem isso a varredura por empresa perderia o
+    endereço no primeiro card incompleto."""
+    deposito.registrar_empresa("Yazaki", "Vagas.com", "Tatuí",
+                               "https://www.vagas.com.br/vagas-de-yazaki")
+    deposito.registrar_empresa("Yazaki", "Vagas.com", "Tatuí", "")
+    assert deposito.empresas_com_url("Vagas.com") == [
+        ("Yazaki", "https://www.vagas.com.br/vagas-de-yazaki")
+    ]

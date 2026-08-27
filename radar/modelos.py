@@ -56,6 +56,10 @@ class Vaga:
     publicado_em: str = ""  # ISO (AAAA-MM-DD) ou ""
     descricao: str = ""
     termo_busca: str = ""
+    # Link da empresa NA FONTE que trouxe esta vaga. É o que permite voltar
+    # depois e varrer tudo que ela abriu, sem depender do termo de busca —
+    # ver fontes/por_empresa.py. Fica vazio quando a fonte não expõe um.
+    empresa_url: str = ""
 
     @property
     def id(self) -> str:

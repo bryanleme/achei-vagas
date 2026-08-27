@@ -77,10 +77,16 @@ class VagasCom(Fonte):
 
                 empresa_el = card.select_one("span.emprVaga")
                 data_el = card.select_one("span.data-publicacao")
+                empresa_nome = empresa_el.get_text(strip=True) if empresa_el else ""
 
                 vaga = montar(
                     titulo=link_el.get("title") or link_el.get_text(strip=True),
-                    empresa=empresa_el.get_text(strip=True) if empresa_el else "",
+                    empresa=empresa_nome,
+                    # O portal publica a empresa em /vagas-de-<slug do nome>.
+                    # Derivado e não lido do card: o card não traz link de
+                    # empresa, e o slug do nome resolve — confirmado ao vivo.
+                    empresa_url=(f"{self.BASE}/vagas-de-{_slug(empresa_nome)}"
+                                 if empresa_nome else ""),
                     # primeiro_texto: o elemento de local traz o tooltip
                     # grudado ("Sorocaba / SP A empresa aceita candidaturas
                     # de..."), e o texto inteiro faria o filtro de cidade
@@ -144,9 +150,17 @@ class InfoJobs(Fonte):
                 empresa_el = card.select_one('a[href*="/empresa-"]')
                 local_el = card.select_one("div.mb-8")
 
+                # O id numérico do fim da URL não é derivável do nome, então
+                # o link precisa ser lido do card — não dá pra reconstruir
+                # depois. Manter o ".aspx": sem ele o portal devolve 404.
+                empresa_href = (empresa_el.get("href") or "") if empresa_el else ""
+                if empresa_href.startswith("/"):
+                    empresa_href = self.BASE + empresa_href
+
                 vaga = montar(
                     titulo=titulo_el.get_text(strip=True),
                     empresa=empresa_el.get_text(strip=True) if empresa_el else "",
+                    empresa_url=empresa_href.split("?")[0],
                     local=(
                         local_el.get_text(" ", strip=True).split(",")[0]
                         if local_el else ""

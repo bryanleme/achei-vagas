@@ -32,6 +32,8 @@ que "uma fonte a menos no Playwright":
 Custo: uma requisição HTTP de milissegundos, sem navegador.
 """
 
+from urllib.parse import urlparse
+
 from radar.fontes.base import Cadencia, Fonte, Resultado, get_json, montar, texto_local
 
 API = "https://employability-portal.gupy.io/api/v1/jobs"
@@ -61,6 +63,17 @@ _MODALIDADE = {
 }
 
 
+def _pagina_de_carreira(bruto: str) -> str:
+    """"https://tenant.gupy.io/eyJzb3VyY2Ui..." -> "https://tenant.gupy.io/".
+
+    O sufixo é um payload em base64 que identifica de onde veio o clique, não
+    a página. Guardar a URL inteira daria um link que funciona hoje e envelhece
+    mal; o domínio é a página de carreira da empresa, estável.
+    """
+    dom = urlparse(bruto or "").netloc
+    return f"https://{dom}/" if dom.endswith(".gupy.io") else ""
+
+
 def _converter(item: dict, termo_busca: str = ""):
     return montar(
         titulo=item.get("name", ""),
@@ -79,6 +92,7 @@ def _converter(item: dict, termo_busca: str = ""):
         # fora o único texto de requisito que o projeto tem de graça.
         descricao=item.get("description", "") or "",
         termo_busca=termo_busca,
+        empresa_url=_pagina_de_carreira(item.get("careerPageUrl")),
     )
 
 

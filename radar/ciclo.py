@@ -298,7 +298,9 @@ async def rodar(so_teste: bool = False) -> dict:
             # por cargo descartaria as empresas certas pela vaga errada.
             cidade_da_vaga = bate_cidade(vaga.local, config.CIDADES, config.UF_BUSCA)
             if cidade_da_vaga and vaga.empresa:
-                deposito.registrar_empresa(vaga.empresa, vaga.fonte, cidade_da_vaga)
+                deposito.registrar_empresa(
+                    vaga.empresa, vaga.fonte, cidade_da_vaga, vaga.empresa_url
+                )
 
             resultado = avaliar(vaga, regras)
 
