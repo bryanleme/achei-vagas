@@ -46,6 +46,15 @@ PESO_SENIORIDADE_ESTAGIO = 0
 # centenas e some no ruído; vaga presencial na região é rara e é a que de
 # fato muda a vida de quem mora ali. O score serve pra destacar o escasso.
 PESO_CIDADE_REGIAO = 3
+# Cidade aceita, mas longe (São Paulo, Campinas, Cotia...). Vale MENOS que
+# remoto confirmado de propósito: uma vaga remota pro Brasil você faz de
+# casa; uma presencial na capital custa duas horas de estrada por dia.
+#
+# MEDIDO no mapeamento da região: São Paulo e Campinas sozinhas bateram o
+# teto de 1.200 vagas da coleta, contra 556 de Sorocaba. Sem o desconto, o
+# resumo seria dominado por elas pelo volume, e a vaga da região — que é
+# rara e é a que interessa — ficaria enterrada no fim da lista.
+PESO_CIDADE_DISTANTE = 1
 PESO_REMOTO_MERCADO_CONFIRMADO = 2
 PESO_REMOTO_SEM_ESCOPO = 1
 
@@ -73,6 +82,7 @@ def pontuar(
     niveis_alvo: set[str],
     niveis_acima: set[str],
     dias_vaga_antiga: int,
+    cidades_distantes: set[str] | None = None,
 ) -> Pontuacao:
     """Pontua uma vaga JÁ APROVADA, reaproveitando a avaliação do filtro.
 
@@ -81,6 +91,7 @@ def pontuar(
     conta aqui seria uma segunda implementação da mesma regra, livre pra
     divergir da primeira sem ninguém notar.
     """
+    cidades_distantes = cidades_distantes or set()
     total = 0
     motivos: list[str] = []
 
@@ -116,8 +127,12 @@ def pontuar(
         total += PESO_SENIORIDADE_NAO_ESPECIFICADA
 
     if avaliacao.cidade:
-        total += PESO_CIDADE_REGIAO
-        motivos.append(avaliacao.cidade)
+        if avaliacao.cidade in cidades_distantes:
+            total += PESO_CIDADE_DISTANTE
+            motivos.append(f"{avaliacao.cidade} (longe)")
+        else:
+            total += PESO_CIDADE_REGIAO
+            motivos.append(avaliacao.cidade)
     elif avaliacao.mercado_confirmado:
         total += PESO_REMOTO_MERCADO_CONFIRMADO
         motivos.append("remoto Brasil")

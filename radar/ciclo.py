@@ -217,6 +217,7 @@ async def rodar(so_teste: bool = False) -> dict:
     """Roda um ciclo completo. `so_teste` não envia nada nem grava."""
     agora = datetime.now(timezone.utc)
     regras = regras_do_perfil()
+    cidades_distantes = set(config.CIDADES_DISTANTES)
 
     deposito.iniciar()
     telegram.zerar_placar()
@@ -353,12 +354,24 @@ async def rodar(so_teste: bool = False) -> dict:
                 niveis_alvo=config.NIVEIS_ALVO,
                 niveis_acima=config.NIVEIS_ACIMA_DO_ALVO,
                 dias_vaga_antiga=config.DIAS_PARA_VAGA_ANTIGA,
+                cidades_distantes=cidades_distantes,
             )
             antiga = vaga.antiga(config.DIAS_PARA_VAGA_ANTIGA)
+            # Cidade distante NUNCA alerta na hora — vai pro resumo,
+            # independente da nota.
+            #
+            # Isto é política, não ajuste de peso. Dava pra chegar no mesmo
+            # efeito baixando PESO_CIDADE_DISTANTE até a conta não alcançar o
+            # limiar, e seria frágil: qualquer mexida futura em outro peso
+            # reabriria o caminho sem ninguém perceber. A regra que se quer é
+            # "vaga a duas horas de casa não interrompe seu dia" — então ela
+            # está escrita assim, e continua valendo mesmo que a escala mude.
+            longe = resultado.cidade in cidades_distantes
             imediata = (
                 nota.total >= config.LIMIAR_ALERTA_IMEDIATO
                 and not antiga
                 and not estreia
+                and not longe
             )
 
             if so_teste:

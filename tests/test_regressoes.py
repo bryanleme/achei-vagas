@@ -362,10 +362,69 @@ def test_cargo_parecido_mas_diferente_nao_passa(regras):
 # Localização — a regra combinada
 # ===========================================================================
 
-def test_presencial_fora_do_corredor_nao_passa(regras):
-    """São Paulo capital não está no corredor. Nem Campinas."""
-    assert combina(vaga(titulo="Analista de PCP", local="São Paulo - SP"), regras) is False
-    assert combina(vaga(titulo="Analista de PCP", local="Campinas - SP"), regras) is False
+def test_presencial_fora_das_cidades_aceitas_nao_passa(regras):
+    """Cidade de SP que não está em nenhuma das duas faixas continua fora."""
+    for cidade in ["Ribeirão Preto", "São José dos Campos", "Santos", "Bauru"]:
+        v = vaga(titulo="Analista de PCP", local=f"{cidade} - SP")
+        assert combina(v, regras) is False, cidade
+
+
+def test_cidade_distante_passa_no_filtro_mas_pontua_menos(regras):
+    """São Paulo e Campinas foram ACEITAS a pedido do usuário — as duas
+    passam no filtro. O que as separa da região é o peso no ranking.
+
+    MEDIDO no mapeamento: São Paulo e Campinas sozinhas bateram o teto de
+    1.200 vagas da coleta, contra 556 de Sorocaba. Com peso igual, elas
+    dominariam todo resumo pelo volume e enterrariam a vaga da região, que é
+    rara e é a que interessa.
+    """
+    from radar import config
+    from radar.relevancia import pontuar
+
+    distantes = set(config.CIDADES_DISTANTES)
+
+    def nota(local):
+        v = vaga(titulo="Analista de PCP", local=local)
+        a = avaliar(v, regras)
+        assert a.aprovada is True, local
+        return pontuar(v, regras, a, niveis_alvo=config.NIVEIS_ALVO,
+                       niveis_acima=config.NIVEIS_ACIMA_DO_ALVO,
+                       dias_vaga_antiga=config.DIAS_PARA_VAGA_ANTIGA,
+                       cidades_distantes=distantes).total
+
+    perto = nota("Sorocaba - SP")
+    longe = nota("São Paulo - SP")
+    assert perto > longe, "vaga da região tem de ranquear acima da capital"
+    assert perto - longe >= 2, "a diferença precisa ser visível no ranking"
+
+
+def test_cidade_distante_nunca_alerta_na_hora():
+    """Regra escrita como POLÍTICA, não como ajuste de peso.
+
+    Dava pra chegar no mesmo efeito baixando o peso até a conta não alcançar
+    o limiar — e seria frágil: qualquer mexida futura em outro peso reabriria
+    o caminho em silêncio. O que se quer é "vaga a duas horas de casa não
+    interrompe seu dia", então está escrito assim no ciclo.
+    """
+    import inspect
+
+    from radar import ciclo as mod
+
+    fonte = inspect.getsource(mod.rodar)
+    assert "and not longe" in fonte
+    assert "cidades_distantes" in fonte
+
+
+def test_toda_cidade_do_config_e_de_sao_paulo():
+    """A guarda de UF compara contra UF_BUSCA, uma só. Uma cidade de outro
+    estado na lista passaria a ser barrada pela própria guarda, em silêncio."""
+    from radar import config
+
+    assert config.UF_BUSCA == "SP"
+    assert set(config.CIDADES) == set(config.CIDADES_REGIAO) | set(config.CIDADES_DISTANTES)
+    assert not (set(config.CIDADES_REGIAO) & set(config.CIDADES_DISTANTES)), (
+        "cidade em duas faixas pontuaria de forma imprevisível"
+    )
 
 
 def test_presencial_no_corredor_passa(regras):
