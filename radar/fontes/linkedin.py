@@ -19,7 +19,35 @@ DUAS ARMADILHAS QUE JÁ CUSTARAM CARO NESTE ENDPOINT, as duas resolvidas aqui:
    106057199 é o Brasil, confirmado ao vivo: os resultados vêm de Belo
    Horizonte, Barueri, Ponta Grossa, Caetanos.
 
-2. O CARD VEM EM INGLÊS quando a idade é mostrada em texto ("4 months ago"),
+2. O FILTRO NATIVO DE REMOTO (f_WT=2) NÃO FUNCIONA AQUI, e confiar nele
+   custou caro. Esta fonte rodava uma segunda passada com f_WT=2 e marcava
+   TUDO que voltava como modalidade="Remoto", no entendimento de que "o
+   próprio LinkedIn já garante isso".
+
+   Não garante. MEDIDO em três termos: a busca com f_WT=2 devolve o MESMO
+   número de vagas que a busca sem ele, em cidades físicas espalhadas pelo
+   país — Cambé/PR, Nerópolis/GO, São Luís/MA, Macaé/RJ — para termos como
+   "analista de logística", que quase nunca é remoto. Para "analista de
+   logística" as 10 vagas eram idênticas às da busca normal.
+
+   O estrago era exatamente o oposto do propósito: marcada como remota, a
+   vaga PULA o filtro de cidade, que é a regra mais importante deste
+   projeto. 113 vagas presenciais em Aracaju, Araquari e Jaboatão entraram
+   como "remotas" na primeira semana — entre elas galpão da Amazon e chão de
+   fábrica de ferramentaria.
+
+   A passada foi removida: ela não filtrava nada, custava o dobro das
+   requisições e só produzia rótulo errado. E o card NÃO EXPÕE modalidade em
+   atributo nenhum (conferido no HTML cru), então esta fonte não declara
+   modalidade — deixa vazia e o texto de local decide, como em qualquer
+   fonte que não informa.
+
+   O que se perde: vaga genuinamente remota do LinkedIn deixa de ser
+   reconhecida como tal. Mas ela nunca chegou a ser reconhecida — era
+   rotulada junto com as presenciais. Perder um sinal que nunca existiu não
+   é perda.
+
+3. O CARD VEM EM INGLÊS quando a idade é mostrada em texto ("4 months ago"),
    mesmo pra vaga brasileira — foi assim que `publicado_em` ficou vazio em
    1.061 de 1.061 vagas, e vaga de quatro meses virou alerta imediato sem
    aviso. Este scraper lê o ATRIBUTO `<time datetime="2026-08-21">`, que é
@@ -44,12 +72,6 @@ GEO_ID_BRASIL = "106057199"
 POR_PAGINA = 10
 MAX_PAGINAS = 3
 
-# Filtro nativo de vaga remota do LinkedIn. Existe uma passada só pra isso
-# porque o card de busca quase nunca escreve "Remoto" no campo de local —
-# mesmo vaga 100% remota aparece com a cidade onde a empresa está
-# registrada. Sem esta passada, vaga remota só apareceria por acidente.
-FILTRO_REMOTO = "2"
-
 
 class LinkedIn(Fonte):
     nome = "LinkedIn"
@@ -61,12 +83,10 @@ class LinkedIn(Fonte):
     max_simultaneas = 1
     pausa = 1.5
 
-    async def _pagina(self, termo: str, inicio: int, remoto: bool) -> list:
-        params = {"keywords": termo, "geoId": GEO_ID_BRASIL, "start": inicio}
-        if remoto:
-            params["f_WT"] = FILTRO_REMOTO
-
-        sopa = await get_html(API, params=params)
+    async def _pagina(self, termo: str, inicio: int) -> list:
+        sopa = await get_html(
+            API, params={"keywords": termo, "geoId": GEO_ID_BRASIL, "start": inicio}
+        )
         vagas = []
 
         for card in sopa.select("li"):
@@ -92,11 +112,10 @@ class LinkedIn(Fonte):
                 local=local_el.get_text(strip=True) if local_el else "",
                 link=(link_el.get("href") or "").split("?")[0],
                 fonte=self.nome,
-                # A passada com f_WT=2 já garante que é remota — o próprio
-                # LinkedIn filtrou. Declarar aqui é mais confiável que
-                # esperar a palavra aparecer num campo de local que
-                # tipicamente traz a cidade da sede.
-                modalidade="Remoto" if remoto else "",
+                # NUNCA declarar modalidade aqui. O card não expõe essa
+                # informação em lugar nenhum, e inventá-la faz a vaga pular
+                # o filtro de cidade. Vazio deixa o texto de local decidir.
+                modalidade="",
                 publicado_em=datas.extrair_data(
                     tempo_el.get("datetime") if tempo_el else None,
                     card.get_text(" ", strip=True) if tempo_el is None else "",
@@ -112,25 +131,19 @@ class LinkedIn(Fonte):
         vagas = []
         vistos = set()
 
-        for remoto in (False, True):
-            # A passada remota vai menos fundo: o volume de vaga remota por
-            # termo é bem menor que o nacional, e ir a três páginas ali é
-            # pagar requisição por página que costuma voltar repetida.
-            paginas = MAX_PAGINAS if not remoto else 2
+        for pagina in range(MAX_PAGINAS):
+            encontradas = await self._pagina(termo, pagina * POR_PAGINA)
 
-            for pagina in range(paginas):
-                encontradas = await self._pagina(termo, pagina * POR_PAGINA, remoto)
+            novas = [v for v in encontradas if v.link not in vistos]
+            # Página que só repetiu o que já veio é o fim da lista. O
+            # endpoint devolve a última página de novo em vez de vazia,
+            # então parar por "veio vazia" pediria uma requisição a mais em
+            # todo termo — e foi confundir esse fim com falha que gerou
+            # quinze alarmes falsos por ciclo no projeto original.
+            if not novas:
+                break
 
-                novas = [v for v in encontradas if v.link not in vistos]
-                # Página que só repetiu o que já veio é o fim da lista. O
-                # endpoint devolve a última página de novo em vez de vazia,
-                # então parar por "veio vazia" pediria uma requisição a mais
-                # em todo termo — e foi confundir esse fim com falha que
-                # gerou quinze alarmes falsos por ciclo no projeto original.
-                if not novas:
-                    break
-
-                vistos.update(v.link for v in novas)
-                vagas.extend(novas)
+            vistos.update(v.link for v in novas)
+            vagas.extend(novas)
 
         return Resultado(vagas=vagas)

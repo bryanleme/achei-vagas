@@ -490,3 +490,49 @@ def test_vaga_normal_continua_passando(regras):
     """A exclusão não pode ter derrubado o caso comum."""
     v = vaga(titulo="Analista de Logística Junior", local="Sorocaba - SP")
     assert avaliar(v, regras).aprovada is True
+
+
+# ===========================================================================
+# B4 — o filtro de remoto que não filtrava
+# ===========================================================================
+
+def test_b4_linkedin_nunca_declara_modalidade():
+    """O maior furo já aberto no filtro deste projeto.
+
+    A fonte do LinkedIn rodava uma segunda passada com `f_WT=2` (o filtro
+    nativo de remoto) e marcava TUDO que voltava como modalidade="Remoto",
+    no entendimento de que "o próprio LinkedIn já garante isso".
+
+    Não garante. MEDIDO em três termos: a busca com f_WT=2 devolve o mesmo
+    número de vagas que a busca sem ele, em cidades físicas espalhadas pelo
+    país — Cambé/PR, Nerópolis/GO, São Luís/MA, Macaé/RJ.
+
+    O estrago era o oposto do propósito: marcada como remota, a vaga PULA o
+    filtro de cidade, que é a regra mais importante do projeto. 113 vagas
+    presenciais entraram como "remotas" na primeira semana, entre elas galpão
+    da Amazon em Aracaju e ferramentaria em Araquari/SC.
+
+    O card não expõe modalidade em atributo nenhum — conferido no HTML cru.
+    Então esta fonte não declara nada e deixa o texto de local decidir.
+    """
+    import inspect
+
+    from radar.fontes import linkedin
+
+    codigo = inspect.getsource(linkedin.LinkedIn)
+    assert 'modalidade="Remoto"' not in codigo, (
+        "LinkedIn não pode declarar modalidade: o card não informa isso"
+    )
+    assert "f_WT" not in codigo, "a passada f_WT não filtra nada e foi removida"
+
+
+def test_b4_vaga_do_linkedin_em_cidade_fora_do_raio_e_barrada(regras):
+    """Os casos reais que chegaram no Telegram como "remoto"."""
+    for titulo, local in [
+        ("Analista Operações Logísticas, AMZL", "Aracaju, SE"),
+        ("Analista de Planejamento de Produção", "Araquari, SC"),
+        ("Analista de Transportes Pleno", "Jaboatão dos Guararapes, PE"),
+    ]:
+        v = vaga(titulo=titulo, local=local, modalidade="", fonte="LinkedIn")
+        assert v.remota is False, local
+        assert combina(v, regras) is False, f"{titulo} @ {local}"
