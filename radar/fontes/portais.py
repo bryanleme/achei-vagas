@@ -26,7 +26,7 @@ from radar.fontes.base import (
     Resultado,
     get_html,
     montar,
-    primeiro_texto,
+    texto_sem,
 )
 
 
@@ -87,11 +87,11 @@ class VagasCom(Fonte):
                     # empresa, e o slug do nome resolve — confirmado ao vivo.
                     empresa_url=(f"{self.BASE}/vagas-de-{_slug(empresa_nome)}"
                                  if empresa_nome else ""),
-                    # primeiro_texto: o elemento de local traz o tooltip
+                    # texto_sem: o elemento de local traz o tooltip
                     # grudado ("Sorocaba / SP A empresa aceita candidaturas
                     # de..."), e o texto inteiro faria o filtro de cidade
                     # comparar contra um parágrafo.
-                    local=primeiro_texto(card.select_one("div.vaga-local")),
+                    local=texto_sem(card.select_one("div.vaga-local"), ".tooltip-place"),
                     link=link,
                     fonte=self.nome,
                     publicado_em=datas.extrair_data(

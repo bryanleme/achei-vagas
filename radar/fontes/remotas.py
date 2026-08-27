@@ -203,4 +203,74 @@ class Himalayas(Fonte):
         return Resultado(vagas=vagas)
 
 
-TODAS = [Remotive, RemoteOK, Arbeitnow, Jobicy, Himalayas]
+class WorkingNomads(Fonte):
+    """Working Nomads — lista completa num GET, sem filtro por termo.
+
+    O endpoint devolve o acervo inteiro e não aceita busca; o filtro de cargo
+    faz o recorte depois. `location` traz o mercado ("Europe", "Worldwide",
+    "Brazil"), que é o que o escopo lê.
+    """
+
+    nome = "Working Nomads"
+    cadencia = Cadencia.DIARIA
+    exige_mercado_declarado = True
+
+    async def buscar(self, termo: str, navegador=None) -> Resultado:
+        dados = await get_json("https://www.workingnomads.com/api/exposed_jobs/")
+        vagas = []
+        for i in dados if isinstance(dados, list) else []:
+            vaga = montar(
+                titulo=i.get("title", ""),
+                empresa=i.get("company_name", ""),
+                local=i.get("location") or "Remoto",
+                link=i.get("url", ""),
+                fonte=self.nome,
+                modalidade=_REMOTO,
+                publicado_em=_data(i.get("pub_date")),
+                descricao=i.get("description", ""),
+                termo_busca=termo,
+            )
+            if vaga:
+                vagas.append(vaga)
+        return Resultado(vagas=vagas)
+
+
+class TheMuse(Fonte):
+    """The Muse — API pública com paginação, sem chave.
+
+    Diferente das outras daqui, NÃO é board de vaga remota: publica vaga
+    presencial americana em massa. Entra mesmo assim porque aceita filtro de
+    localização e o acervo tem empresa que contrata no Brasil — mas com
+    `exige_mercado_declarado`, senão as vagas de Seattle entrariam como
+    "remoto sem escopo".
+    """
+
+    nome = "The Muse"
+    cadencia = Cadencia.DIARIA
+    exige_mercado_declarado = True
+    max_simultaneas = 2
+    pausa = 0.4
+
+    async def buscar(self, termo: str, navegador=None) -> Resultado:
+        dados = await get_json(
+            "https://www.themuse.com/api/public/jobs",
+            params={"page": 1, "location": "Brazil"},
+        )
+        vagas = []
+        for i in dados.get("results") or []:
+            locais = [l.get("name", "") for l in (i.get("locations") or [])]
+            vaga = montar(
+                titulo=i.get("name", ""),
+                empresa=(i.get("company") or {}).get("name", ""),
+                local=", ".join(locais) or "Remoto",
+                link=(i.get("refs") or {}).get("landing_page", ""),
+                fonte=self.nome,
+                publicado_em=_data(i.get("publication_date")),
+                termo_busca=termo,
+            )
+            if vaga:
+                vagas.append(vaga)
+        return Resultado(vagas=vagas)
+
+
+TODAS = [Remotive, RemoteOK, Arbeitnow, Jobicy, Himalayas, WorkingNomads, TheMuse]

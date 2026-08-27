@@ -61,46 +61,64 @@ fonte fica ou sai.
 
 ## Fontes
 
-| Fonte | Tipo | Cadência |
-|---|---|---|
-| **Gupy** | API JSON | todo ciclo |
-| **Vagas.com** | HTML servido | todo ciclo |
-| **InfoJobs** | HTML servido | todo ciclo |
-| Catho | HTML servido | diária |
-| Remotive, RemoteOK, Jobicy, Himalayas | API JSON | todo ciclo |
-| Arbeitnow | API JSON | diária |
+**19 fontes, nenhuma usando navegador.** Elas se dividem em três formas de
+perguntar, e a diferença entre elas importa mais que a contagem.
 
-**Nenhuma fonte usa navegador.** Isso não foi meta de projeto — foi o que a
-medição mostrou, portal por portal, antes de escrever qualquer scraper:
+**Por termo** — "quem tem vaga de PCP?" — roda a cada 3 horas:
 
-- a Gupy tem **API JSON pública** (`employability-portal.gupy.io/api/v1/jobs`),
-  descoberta inspecionando as requisições reais do portal. Entrega `city`,
-  `state`, `workplaceType` e `publishedDate` em campos separados, com o total
-  de resultados na resposta;
-- Vagas.com, InfoJobs e Catho **servem a lista de vagas no HTML da resposta** —
-  10, 22 e 20 cards num `GET` simples.
+| Fonte | Tipo |
+|---|---|
+| Gupy | API JSON |
+| LinkedIn | endpoint de convidado (`geoId`) |
+| Vagas.com · InfoJobs · Catho | HTML servido |
+| Remotive · RemoteOK · Jobicy · Himalayas · Arbeitnow · Working Nomads · The Muse | API JSON |
 
-O projeto de origem abria Chromium em 9 das 11 fontes. O ciclo lá passava de
-uma hora; aqui leva 20 segundos. E o navegador headless era o vetor de todo
-bloqueio anti-bot — uma fonte bloqueada chegou a estender o ciclo em 19
-minutos entregando zero vaga. Se um portal um dia passar a montar a lista só
-no navegador, o Playwright volta **para ele**, não para todos por precaução.
+**Por cidade** — "o que existe em Itapetininga?" — roda 1× por dia, nas 35
+cidades da região:
 
-Para a fonte principal, o dado estruturado elimina de uma vez as três classes
-de bug mais caras deste tipo de projeto: adivinhar localização em texto solto,
-deduzir modalidade de palavra solta, e descobrir o fim da paginação por
-tentativa e erro.
+| Fonte | Tipo |
+|---|---|
+| BNE | HTML, com **modalidade declarada** em campo próprio |
+| Vagas.com · InfoJobs · Catho | HTML servido |
 
-Os agregadores de vaga remota internacional têm rendimento esperado **baixo**,
-e isso está registrado no código. Eles exigem que a vaga **declare** o mercado
-— num portal brasileiro "remoto sem escopo" quer dizer Brasil, num agregador
-em inglês quer dizer o contrário. Sem essa regra, um deles sozinho aprovou 60
-vagas irrelevantes num ciclo. Critério de saída: um mês sem vaga aprovada e
-saem.
+**Por empresa** — "o que a Smurfit abriu?" — 1× por dia, nas empresas que o
+próprio radar descobriu: Gupy, Vagas.com, InfoJobs.
 
-**Ainda não ligadas:** LinkedIn, 99jobs, Indeed, Trabalha Brasil, e boards de
-ATS por empresa (Greenhouse/Lever/Gupy) das companhias da região — a fonte de
-melhor rendimento potencial e que o projeto de origem nunca explorou.
+### Por que três formas, e não só mais fontes
+
+Buscar por termo tem um limite estrutural: o rodízio roda 15 termos por ciclo,
+então uma vaga só aparece quando o termo certo chega a vez — e ainda precisa
+que a fonte case o texto do jeito que escrevemos. Uma vaga real
+("Analista de Suprimentos (Foco em Defesa)") só apareceu quando aquele termo
+entrou no bloco.
+
+Para uma busca presa a uma região, **perguntar pela cidade cobre mais**: pega
+vaga de título que nenhum termo do config alcançaria, e não espera rodízio
+nenhum. O filtro de cargo continua sendo quem decide — a varredura só amplia o
+que chega até ele.
+
+A lista de empresas **se monta sozinha**: o ciclo registra toda empresa que
+publicou numa cidade da região, inclusive quando a vaga em si foi reprovada.
+Uma metalúrgica de Tatuí que hoje publicou "Soldador" é exatamente a empresa
+que mês que vem publica "Analista de PCP".
+
+### O que foi testado e ficou de fora
+
+Cada fonte foi sondada ao vivo antes de virar código. Não entraram:
+Empregos.com.br (HTTP 502), Netvagas (404), Emprega SP (fora do ar),
+Jobspresso e 99jobs (sem card no HTML servido), Adzuna e Jooble (exigem
+chave), Teamtailor (406). TrabalhaBrasil e Solides montam a lista só no
+navegador — voltam se alguma expuser API.
+
+Greenhouse, Lever e Ashby respondem sem chave, mas identificam empresa por
+token próprio e no Brasil são quase só empresa de tecnologia. Ficam anotadas
+para quando houver lista de empresa que as use.
+
+Os agregadores de vaga remota internacional têm rendimento **baixo** e isso
+está registrado no código: exigem que a vaga **declare** o mercado — num
+portal brasileiro "remoto sem escopo" quer dizer Brasil, num agregador em
+inglês quer dizer o contrário. Sem essa regra, um deles sozinho aprovou 60
+vagas irrelevantes num ciclo.
 
 ## Rodar
 

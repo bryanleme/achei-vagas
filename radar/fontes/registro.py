@@ -19,7 +19,7 @@ impressão:
 """
 
 from radar import config
-from radar.fontes import por_empresa, portais, remotas
+from radar.fontes import por_cidade, por_empresa, portais, remotas
 from radar.fontes.base import Cadencia, Fonte
 from radar.fontes.gupy import Gupy
 from radar.fontes.linkedin import LinkedIn
@@ -54,6 +54,15 @@ def fontes_ativas() -> list[Fonte]:
         # empresa não é identificador universal, e "Yazaki do Brasil Ltda."
         # (do Vagas.com) devolve zero na Gupy. Ver por_empresa.py.
         *[classe() for classe in por_empresa.TODAS],
+
+        # Varredura por CIDADE — a cobertura exaustiva da região.
+        #
+        # Todo o resto pergunta "quem tem vaga de PCP?", o que só acha o que o
+        # termo casa e depende do rodízio chegar na vez dele. Aqui a pergunta
+        # é "o que existe em Itapetininga?" — que, pra uma busca presa a uma
+        # região, cobre mais: pega vaga de título que nenhum termo do config
+        # alcançaria, e não espera rodízio nenhum.
+        *[classe() for classe in por_cidade.TODAS],
     ]
 
 

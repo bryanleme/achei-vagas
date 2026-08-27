@@ -536,3 +536,72 @@ def test_b4_vaga_do_linkedin_em_cidade_fora_do_raio_e_barrada(regras):
         v = vaga(titulo=titulo, local=local, modalidade="", fonte="LinkedIn")
         assert v.remota is False, local
         assert combina(v, regras) is False, f"{titulo} @ {local}"
+
+
+# ===========================================================================
+# A3 — texto que o portal envolve numa tag
+# ===========================================================================
+
+def test_a3_cidade_dentro_de_tag_de_destaque_e_lida():
+    """MEDIDO ao ligar a varredura por cidade: TODA vaga do Vagas.com era
+    rejeitada, em silêncio.
+
+    A extração de local pegava o PRIMEIRO NÓ DE TEXTO do elemento, pra fugir
+    do tooltip que vem grudado ali ("Sorocaba / SP A empresa aceita
+    candidaturas de..."). Funciona — até o portal envolver o nome da cidade
+    numa tag. Na página de busca por cidade, o Vagas.com destaca o termo
+    casado: `<div class="vaga-local"><mark>Sorocaba</mark> / SP <tooltip…>`.
+    O primeiro nó de texto direto passa a ser " / SP", sem cidade nenhuma.
+
+    Remover o que atrapalha é mais robusto que adivinhar onde o que importa
+    está.
+    """
+    from bs4 import BeautifulSoup
+
+    from radar.fontes.base import texto_sem
+
+    com_destaque = BeautifulSoup(
+        '<div class="vaga-local"><i></i><mark>Sorocaba</mark> / SP'
+        '<div class="tooltip-place">A empresa aceita candidaturas de Sorocaba'
+        ' e cidades próximas</div></div>', "lxml").select_one("div.vaga-local")
+    sem_destaque = BeautifulSoup(
+        '<div class="vaga-local"><i></i>Mogi-Guaçu / SP'
+        '<div class="tooltip-place">A empresa aceita candidaturas</div></div>',
+        "lxml").select_one("div.vaga-local")
+
+    assert texto_sem(com_destaque, ".tooltip-place") == "Sorocaba / SP"
+    assert texto_sem(sem_destaque, ".tooltip-place") == "Mogi-Guaçu / SP"
+
+
+def test_a3_tooltip_nunca_entra_no_local():
+    """O motivo de a extração existir: o texto inteiro faria o filtro de
+    cidade comparar contra um parágrafo."""
+    from bs4 import BeautifulSoup
+
+    from radar.fontes.base import texto_sem
+
+    el = BeautifulSoup(
+        '<div class="vaga-local"><mark>Tatuí</mark> / SP'
+        '<div class="tooltip-place">A empresa aceita candidaturas de Tatuí e '
+        'cidades próximas como Sorocaba, Itapetininga e Boituva</div></div>',
+        "lxml").select_one("div.vaga-local")
+    local = texto_sem(el, ".tooltip-place")
+    assert local == "Tatuí / SP"
+    assert "próximas" not in local
+    assert "Sorocaba" not in local, "cidade do tooltip não pode virar a cidade da vaga"
+
+
+def test_a3_extracao_nao_mutila_o_card():
+    """A sopa é reusada pelos outros campos do mesmo card — a remoção tem de
+    acontecer numa cópia, senão o tooltip some do DOM e o próximo campo lido
+    do card sai errado."""
+    from bs4 import BeautifulSoup
+
+    from radar.fontes.base import texto_sem
+
+    card = BeautifulSoup(
+        '<li class="vaga"><div class="vaga-local">Buri / SP'
+        '<div class="tooltip-place">aviso</div></div></li>', "lxml")
+    el = card.select_one("div.vaga-local")
+    texto_sem(el, ".tooltip-place")
+    assert card.select_one(".tooltip-place") is not None, "o card foi mutilado"

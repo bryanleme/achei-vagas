@@ -20,9 +20,20 @@ jobs:
     runs-on: ubuntu-latest
     # O padrão do GitHub Actions é 6 horas. Uma fonte travada consumiria isso
     # inteiro a cada execução e, com cancel-in-progress:false, ainda
-    # bloquearia o ciclo seguinte na fila. 20 minutos é folga larga sobre a
-    # duração medida e fica muito abaixo do intervalo do cron.
-    timeout-minutes: 20
+    # bloquearia o ciclo seguinte na fila.
+    #
+    # 40 min porque o ciclo tem DUAS durações muito diferentes, e o teto tem
+    # de caber na maior:
+    #   - 7 dos 8 ciclos do dia rodam só as fontes por termo: ~2 min;
+    #   - o PRIMEIRO ciclo de cada dia roda também as varreduras por cidade
+    #     (35 cidades x 4 portais) e por empresa (50 empresas x 3 portais).
+    #     MEDIDO em máquina doméstica: 10min55s.
+    #
+    # O runner do Actions é mais lento que a máquina de casa, então 20 min
+    # ficaria apertado justamente no ciclo que mais entrega. 40 min dá folga
+    # de quase 4x sobre o medido e ainda fica bem abaixo do intervalo de 3h,
+    # então um run truncado nunca empilha em cima do próximo agendado.
+    timeout-minutes: 40
 
     steps:
       - uses: actions/checkout@v7

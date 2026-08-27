@@ -45,7 +45,7 @@ from radar.fontes.base import (
     get_html,
     get_json,
     montar,
-    primeiro_texto,
+    texto_sem,
 )
 from radar.fontes.gupy import API, CABECALHOS, _converter
 
@@ -159,7 +159,7 @@ class VagasComPorEmpresa(VarreduraPorEmpresa):
             vagas.append(montar(
                 titulo=link_el.get("title") or link_el.get_text(strip=True),
                 empresa=nome,
-                local=primeiro_texto(card.select_one("div.vaga-local")),
+                local=texto_sem(card.select_one("div.vaga-local"), ".tooltip-place"),
                 link=f"{self.BASE}{href}" if href.startswith("/") else href,
                 fonte="Vagas.com",
                 termo_busca=f"empresa:{nome}",

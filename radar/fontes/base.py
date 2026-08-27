@@ -198,20 +198,36 @@ async def get_html(url: str, params: dict | None = None):
     return await asyncio.to_thread(_buscar)
 
 
-def primeiro_texto(elemento) -> str:
-    """Só o primeiro nó de TEXTO do elemento, ignorando filhos.
+def texto_sem(elemento, *seletores: str) -> str:
+    """Texto do elemento, DESCARTANDO os pedaços que os seletores casam.
 
-    Os portais grudam o local da vaga com um tooltip no mesmo elemento —
-    "Pirapora do Bom Jesus / SP A empresa aceita candidaturas de...". Pegar
-    o texto inteiro leva a frase do tooltip junto pro campo de local, e o
-    filtro de cidade passa a comparar contra um parágrafo.
+    Os portais grudam o local da vaga com um tooltip dentro do mesmo
+    elemento — "Sorocaba / SP A empresa aceita candidaturas de Sorocaba e
+    cidades próximas". Pegar o texto inteiro joga a frase do tooltip no campo
+    de local, e o filtro de cidade passa a comparar contra um parágrafo.
+
+    A versão anterior disto pegava só o PRIMEIRO NÓ DE TEXTO, o que funciona
+    até o portal envolver o nome da cidade numa tag. MEDIDO: na página de
+    busca por cidade, o Vagas.com destaca o termo casado —
+    `<div class="vaga-local"> <mark>Sorocaba</mark> / SP <tooltip…>` — e o
+    primeiro nó de texto direto passa a ser " / SP", sem cidade nenhuma.
+    Efeito: TODA vaga da varredura por cidade era rejeitada, em silêncio,
+    porque "/ SP" não bate cidade alguma.
+
+    Remover o que atrapalha é mais robusto que adivinhar onde o que importa
+    está: o texto útil continua sendo lido inteiro, com tag no meio ou sem.
     """
     if elemento is None:
         return ""
-    for filho in elemento.children:
-        if isinstance(filho, str) and filho.strip():
-            return filho.strip()
-    return elemento.get_text(" ", strip=True)
+    # `extract()` mutila a árvore, e a sopa é reusada pelos outros campos do
+    # mesmo card — por isso a cópia.
+    import copy
+
+    clone = copy.copy(elemento)
+    for sel in seletores:
+        for lixo in clone.select(sel):
+            lixo.decompose()
+    return clone.get_text(" ", strip=True)
 
 
 def texto_local(*partes: str | None) -> str:
