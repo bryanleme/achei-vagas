@@ -27,8 +27,8 @@ class BancoSuspeito(RuntimeError):
     com banco vazio — é o pior estrago possível neste projeto: toda vaga
     volta a ser "nova", o Telegram recebe centenas de notificações
     repetidas, o rodízio de termos reinicia e a fila do digest é descartada.
-    Aconteceu de verdade no projeto original, por um caminho de arquivo que
-    mudou em silêncio, e ninguém percebeu por dias porque nada dava erro.
+    Basta um caminho de arquivo mudar em silêncio pra isso acontecer, e
+    ninguém perceberia por dias porque nada daria erro.
 
     Melhor não rodar do que rodar renotificando tudo.
     """
@@ -89,11 +89,11 @@ def iniciar() -> None:
     """Cria o esquema se não existir e confere que o histórico continua lá.
 
     O esquema nasce COMPLETO, com todas as colunas. Isso é uma decisão, não
-    preguiça: no projeto original cada recurso novo adicionava a sua coluna
-    por `ALTER TABLE` em tempo de execução, e uma dessas migrações adicionou
-    a coluna de deduplicação sem preencher o histórico. Resultado: 373
-    linhas antigas com valor NULL, e `WHERE chave = ?` nunca bate contra
-    NULL em SQL — 52 vagas duplicadas voltaram a notificar.
+    preguiça: se cada recurso novo adicionasse a sua coluna por `ALTER
+    TABLE` em tempo de execução, bastaria uma migração adicionar a coluna de
+    deduplicação sem preencher o histórico. As linhas antigas ficariam com
+    NULL, e `WHERE chave = ?` nunca bate contra NULL em SQL — vaga
+    duplicada voltaria a notificar.
 
     Se um dia uma coluna nova for mesmo necessária, a regra fica registrada
     aqui: adicionar a coluna E preencher o histórico na mesma função, sempre.
@@ -148,7 +148,7 @@ def registrar_total() -> int:
 # Deduplicação
 # ---------------------------------------------------------------------------
 
-def ja_vista(vaga: Vaga) -> bool:
+def vaga_conhecida(vaga: Vaga) -> bool:
     """A vaga já foi vista — pelo link OU por empresa+título.
 
     As duas chaves importam. O link pega a mesma vaga reencontrada na mesma

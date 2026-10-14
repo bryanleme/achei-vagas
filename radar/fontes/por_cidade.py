@@ -100,8 +100,8 @@ class BNE(VarreduraPorCidade):
         sopa = await get_html(f"{self.BASE}/vagas-de-emprego/{_slug(cidade)}-sp")
         vagas = []
         for card in sopa.select("section.job__card__container"):
-            titulo_el = card.select_one("h2 strong")
-            if not titulo_el:
+            no_titulo = card.select_one("h2 strong")
+            if not no_titulo:
                 continue
 
             ident = (card.get("id") or "").replace("job-", "")
@@ -117,7 +117,7 @@ class BNE(VarreduraPorCidade):
             local = campos[3] if len(campos) > 3 else cidade
 
             vagas.append(montar(
-                titulo=titulo_el.get_text(" ", strip=True),
+                titulo=no_titulo.get_text(" ", strip=True),
                 empresa="" if empresa.lower() == "confidencial" else empresa,
                 local=local,
                 link=f"{self.BASE}/vagas/{ident}",
@@ -147,15 +147,15 @@ class VagasComPorCidade(VarreduraPorCidade):
                 break
             antes = len(vagas)
             for card in cards:
-                link_el = card.select_one("h2.cargo a")
-                if not link_el:
+                no_link = card.select_one("h2.cargo a")
+                if not no_link:
                     continue
-                href = link_el.get("href") or ""
-                empresa_el = card.select_one("span.emprVaga")
+                href = no_link.get("href") or ""
+                no_empresa = card.select_one("span.emprVaga")
                 data_el = card.select_one("span.data-publicacao")
-                nome_empresa = empresa_el.get_text(strip=True) if empresa_el else ""
+                nome_empresa = no_empresa.get_text(strip=True) if no_empresa else ""
                 vagas.append(montar(
-                    titulo=link_el.get("title") or link_el.get_text(strip=True),
+                    titulo=no_link.get("title") or no_link.get_text(strip=True),
                     empresa=nome_empresa,
                     local=texto_sem(card.select_one("div.vaga-local"), ".tooltip-place") or cidade,
                     link=f"{self.BASE}{href}" if href.startswith("/") else href,
@@ -190,22 +190,22 @@ class InfoJobsPorCidade(VarreduraPorCidade):
                 break
             antes = len(vagas)
             for card in cards:
-                titulo_el = card.select_one("h2")
-                link_el = card.select_one('a[href*="/vaga-de-"]')
-                if not titulo_el or not link_el:
+                no_titulo = card.select_one("h2")
+                no_link = card.select_one('a[href*="/vaga-de-"]')
+                if not no_titulo or not no_link:
                     continue
-                href = link_el.get("href") or ""
-                empresa_el = card.select_one('a[href*="/empresa-"]')
-                empresa_href = (empresa_el.get("href") or "") if empresa_el else ""
+                href = no_link.get("href") or ""
+                no_empresa = card.select_one('a[href*="/empresa-"]')
+                empresa_href = (no_empresa.get("href") or "") if no_empresa else ""
                 if empresa_href.startswith("/"):
                     empresa_href = self.BASE + empresa_href
-                local_el = card.select_one("div.mb-8")
+                no_local = card.select_one("div.mb-8")
                 vagas.append(montar(
-                    titulo=titulo_el.get_text(strip=True),
-                    empresa=empresa_el.get_text(strip=True) if empresa_el else "",
+                    titulo=no_titulo.get_text(strip=True),
+                    empresa=no_empresa.get_text(strip=True) if no_empresa else "",
                     empresa_url=empresa_href.split("?")[0],
-                    local=(local_el.get_text(" ", strip=True).split(",")[0]
-                           if local_el else cidade),
+                    local=(no_local.get_text(" ", strip=True).split(",")[0]
+                           if no_local else cidade),
                     link=f"{self.BASE}{href}" if href.startswith("/") else href,
                     fonte="InfoJobs",
                     termo_busca=f"cidade:{cidade}",
@@ -225,14 +225,14 @@ class CathoPorCidade(VarreduraPorCidade):
         sopa = await get_html(f"{self.BASE}/sp-{_slug(cidade)}/")
         vagas = []
         for card in sopa.select("article"):
-            titulo_el = card.select_one("h2 a") or card.select_one("h2")
-            if not titulo_el:
+            no_titulo = card.select_one("h2 a") or card.select_one("h2")
+            if not no_titulo:
                 continue
-            href = titulo_el.get("href") if titulo_el.name == "a" else ""
-            empresa_el = card.select_one("p.mb-2 span")
+            href = no_titulo.get("href") if no_titulo.name == "a" else ""
+            no_empresa = card.select_one("p.mb-2 span")
             vagas.append(montar(
-                titulo=titulo_el.get_text(strip=True),
-                empresa=empresa_el.get_text(strip=True) if empresa_el else "",
+                titulo=no_titulo.get_text(strip=True),
+                empresa=no_empresa.get_text(strip=True) if no_empresa else "",
                 local=cidade,
                 link=(f"https://www.catho.com.br{href}"
                       if href and href.startswith("/") else (href or "")),

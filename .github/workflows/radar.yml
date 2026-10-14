@@ -76,7 +76,8 @@ jobs:
         # ---------------------------------------------------------------
         # ESTE PASSO JÁ REVERTEU CÓDIGO EM PRODUÇÃO. Leia antes de mudar.
         #
-        # A versão original usava, pra reenviar quando o push era recusado:
+        # A primeira versão deste passo usava, pra reenviar quando o push
+        # era recusado:
         #
         #     git rebase origin/main -X theirs
         #

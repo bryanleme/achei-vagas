@@ -5,11 +5,11 @@ daqui devolvem a lista de vagas pronta num GET simples. Vagas.com trouxe 10
 cards, InfoJobs 22, Catho 20 — com título, empresa, local e, no caso do
 Vagas.com, data de publicação real.
 
-Isso contraria a suposição do projeto original, e a diferença é enorme:
-nove das onze fontes de lá abriam Chromium headless. O ciclo levava mais de
-uma hora, o navegador era o vetor de todo bloqueio anti-bot, e uma única
-fonte travada estendia o ciclo em 19 minutos entregando zero vaga. Nada
-disso era necessário para a maioria delas.
+Isso contraria a suposição comum de que scraper de vaga precisa de
+Chromium headless, e a diferença é enorme: com navegador o ciclo passaria
+de uma hora, o navegador seria o vetor de todo bloqueio anti-bot, e uma
+única fonte travada estenderia o ciclo em vários minutos entregando zero
+vaga. Nada disso é necessário para a maioria das fontes.
 
 O que continua valendo: se um portal passar a montar a lista só no
 navegador, aí sim vale um scraper de Playwright — para ele, e não para
@@ -33,9 +33,9 @@ from radar.fontes.base import (
 def _slug(texto: str) -> str:
     """"Analista de PCP" -> "analista-de-pcp". Vagas.com e Catho põem o termo
     no CAMINHO da URL, não em parâmetro de busca."""
-    sem_acento = unicodedata.normalize("NFKD", texto)
-    sem_acento = "".join(c for c in sem_acento if not unicodedata.combining(c))
-    return re.sub(r"[^a-z0-9]+", "-", sem_acento.lower()).strip("-")
+    tirar_acentos = unicodedata.normalize("NFKD", texto)
+    tirar_acentos = "".join(c for c in tirar_acentos if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "-", tirar_acentos.lower()).strip("-")
 
 
 class VagasCom(Fonte):
@@ -64,23 +64,23 @@ class VagasCom(Fonte):
 
             novas_da_pagina = 0
             for card in cards:
-                link_el = card.select_one("h2.cargo a")
-                if not link_el:
+                no_link = card.select_one("h2.cargo a")
+                if not no_link:
                     continue
 
-                href = link_el.get("href") or ""
+                href = no_link.get("href") or ""
                 link = f"{self.BASE}{href}" if href.startswith("/") else href
                 if link in vistos:
                     continue
                 vistos.add(link)
                 novas_da_pagina += 1
 
-                empresa_el = card.select_one("span.emprVaga")
+                no_empresa = card.select_one("span.emprVaga")
                 data_el = card.select_one("span.data-publicacao")
-                empresa_nome = empresa_el.get_text(strip=True) if empresa_el else ""
+                empresa_nome = no_empresa.get_text(strip=True) if no_empresa else ""
 
                 vaga = montar(
-                    titulo=link_el.get("title") or link_el.get_text(strip=True),
+                    titulo=no_link.get("title") or no_link.get_text(strip=True),
                     empresa=empresa_nome,
                     # O portal publica a empresa em /vagas-de-<slug do nome>.
                     # Derivado e não lido do card: o card não traz link de
@@ -135,35 +135,35 @@ class InfoJobs(Fonte):
 
             novas_da_pagina = 0
             for card in cards:
-                titulo_el = card.select_one("h2")
-                link_el = card.select_one('a[href*="/vaga-de-"]')
-                if not titulo_el or not link_el:
+                no_titulo = card.select_one("h2")
+                no_link = card.select_one('a[href*="/vaga-de-"]')
+                if not no_titulo or not no_link:
                     continue
 
-                href = link_el.get("href") or ""
+                href = no_link.get("href") or ""
                 link = f"{self.BASE}{href}" if href.startswith("/") else href
                 if link in vistos:
                     continue
                 vistos.add(link)
                 novas_da_pagina += 1
 
-                empresa_el = card.select_one('a[href*="/empresa-"]')
-                local_el = card.select_one("div.mb-8")
+                no_empresa = card.select_one('a[href*="/empresa-"]')
+                no_local = card.select_one("div.mb-8")
 
                 # O id numérico do fim da URL não é derivável do nome, então
                 # o link precisa ser lido do card — não dá pra reconstruir
                 # depois. Manter o ".aspx": sem ele o portal devolve 404.
-                empresa_href = (empresa_el.get("href") or "") if empresa_el else ""
+                empresa_href = (no_empresa.get("href") or "") if no_empresa else ""
                 if empresa_href.startswith("/"):
                     empresa_href = self.BASE + empresa_href
 
                 vaga = montar(
-                    titulo=titulo_el.get_text(strip=True),
-                    empresa=empresa_el.get_text(strip=True) if empresa_el else "",
+                    titulo=no_titulo.get_text(strip=True),
+                    empresa=no_empresa.get_text(strip=True) if no_empresa else "",
                     empresa_url=empresa_href.split("?")[0],
                     local=(
-                        local_el.get_text(" ", strip=True).split(",")[0]
-                        if local_el else ""
+                        no_local.get_text(" ", strip=True).split(",")[0]
+                        if no_local else ""
                     ),
                     link=link,
                     fonte=self.nome,
@@ -181,10 +181,10 @@ class InfoJobs(Fonte):
 class Catho(Fonte):
     """Catho — busca por slug de termo mais estado no caminho da URL.
 
-    Cadência diária: no projeto original a Catho rendia menos de 1% e era a
-    fonte que mais dava timeout. Aqui ela custa um GET em vez de uma sessão
-    de navegador, mas o rendimento baixo continua sendo motivo pra não
-    gastar uma passada dela a cada três horas.
+    Cadência diária: a Catho tem rendimento baixo pro perfil e é a fonte
+    mais sujeita a timeout. Custa um GET em vez de uma sessão de navegador,
+    mas o rendimento baixo é motivo pra não gastar uma passada dela a cada
+    três horas.
     """
 
     nome = "Catho"
@@ -201,26 +201,26 @@ class Catho(Fonte):
 
         vagas = []
         for card in sopa.select("article"):
-            titulo_el = card.select_one("h2 a") or card.select_one("h2")
-            if not titulo_el:
+            no_titulo = card.select_one("h2 a") or card.select_one("h2")
+            if not no_titulo:
                 continue
 
-            href = titulo_el.get("href") if titulo_el.name == "a" else ""
+            href = no_titulo.get("href") if no_titulo.name == "a" else ""
             link = (
                 f"https://www.catho.com.br{href}"
                 if href and href.startswith("/") else (href or "")
             )
 
-            empresa_el = card.select_one("p.mb-2 span")
-            local_el = card.select_one('p:has(span[class*="location"])')
-            local_texto = local_el.get_text(" ", strip=True) if local_el else ""
+            no_empresa = card.select_one("p.mb-2 span")
+            no_local = card.select_one('p:has(span[class*="location"])')
+            local_texto = no_local.get_text(" ", strip=True) if no_local else ""
             # Formato "3 vagas - São Paulo": a cidade vem depois do hífen.
             if " - " in local_texto:
                 local_texto = local_texto.split(" - ", 1)[1]
 
             vaga = montar(
-                titulo=titulo_el.get_text(strip=True),
-                empresa=empresa_el.get_text(strip=True) if empresa_el else "",
+                titulo=no_titulo.get_text(strip=True),
+                empresa=no_empresa.get_text(strip=True) if no_empresa else "",
                 local=local_texto,
                 link=link,
                 fonte=self.nome,

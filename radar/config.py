@@ -152,7 +152,7 @@ QUALIFICADORES_DOMINIO = [
 # esmagadora maioria é vaga técnica/funcional de SAP, não do domínio de
 # interesse. "MMOG/LE" entra porque, ao contrário de SAP, não tem uso fora
 # de auditoria/conformidade automotiva.
-FERRAMENTAS_TITULO = [
+FERRAMENTAS_DE_CARGO = [
     "Power BI",
     "MMOG/LE",
     "WMS",
@@ -162,7 +162,7 @@ FERRAMENTAS_TITULO = [
 # Palavra de cargo que confirma que a vaga de ferramenta é de análise, não
 # de desenvolvimento. "desenvolvedor"/"developer"/"engenheiro" ficam FORA
 # de propósito — é o que mantém vaga de dev fora do radar.
-QUALIFICADORES_CARGO = [
+PALAVRAS_DE_CARGO = [
     "analista",
     "analyst",
     "especialista",
@@ -214,10 +214,9 @@ EXCLUSOES_TITULO = [
 # Os termos são DERIVADOS dos cargos acima, nunca mantidos numa lista
 # paralela à mão.
 #
-# No projeto que deu origem a este, as duas listas eram independentes e
-# divergiram em silêncio: metade dos cargos filtrados nunca chegava a ser
-# buscada de verdade, e as vagas correspondentes só apareciam por acidente,
-# quando outro termo as trazia junto. Derivando, cargo novo vira busca nova
+# Duas listas independentes divergem em silêncio: cargo filtrado que nunca
+# é buscado de verdade, e vaga correspondente que só aparece por acidente,
+# quando outro termo a traz junto. Derivando, cargo novo vira busca nova
 # automaticamente — a divergência deixa de ser possível.
 
 # Termos mais largos que o cargo exato: dão rede maior na busca sem afrouxar
@@ -237,18 +236,17 @@ TERMOS_EXTRA = [
     "indicadores logísticos",
 ]
 
-TERMOS_BUSCA = sorted(
+TERMOS_DE_BUSCA = sorted(
     {c.lower() for c in CARGOS_FORTES + CARGOS_AMBIGUOS} | set(TERMOS_EXTRA)
 )
 
 # Termos que rodam em TODO ciclo, fora do rodízio.
 #
-# São os títulos que mais aparecem no que interessa de verdade. No projeto
-# original todos os termos disputavam vez por igual num rodízio alfabético:
-# com 44 termos e 10 por ciclo, uma volta completa levava 13 horas, e o
-# termo que dava nome ao perfil inteiro era buscado uma vez a cada 13h —
-# uma vaga real publicada logo depois da passagem dele ficava invisível meio
-# dia. Tirar os principais do rodízio custa alguns minutos por ciclo e
+# São os títulos que mais aparecem no que interessa de verdade. Num rodízio
+# em que todos disputam vez por igual, com ~44 termos e 10 por ciclo, uma
+# volta completa leva 13 horas, e o termo que dá nome ao perfil inteiro
+# seria buscado uma vez a cada 13h — uma vaga real publicada logo depois da
+# passagem dele ficaria invisível meio dia. Tirar os principais do rodízio custa alguns minutos por ciclo e
 # resolve isso.
 TERMOS_PRIORITARIOS = [
     "analista de pcp",
@@ -261,9 +259,9 @@ TERMOS_PRIORITARIOS = [
 # Tamanho do BLOCO do rodízio por ciclo — não é o total de termos. O ciclo
 # roda os prioritários + um bloco deste tamanho, e avança o bloco no ciclo
 # seguinte (posição salva no banco). Isso desacopla o custo de cada ciclo do
-# tamanho da lista: dobrar TERMOS_BUSCA dobra quantos ciclos até cobrir tudo
+# tamanho da lista: dobrar TERMOS_DE_BUSCA dobra quantos ciclos até cobrir tudo
 # de novo, não o custo de um ciclo.
-TERMOS_POR_CICLO = 10
+TERMOS_POR_RODADA = 10
 
 
 # ---------------------------------------------------------------------------
@@ -359,7 +357,7 @@ ACEITA_REMOTO = True
 #
 # Só Brasil: vaga remota pra outro país não serve, e deixar a lista aberta
 # só encheria o digest de vaga em inglês pro mercado americano.
-MERCADOS_REMOTO_ACEITOS = ["Brasil"]
+PAISES_REMOTO_PERMITIDOS = ["Brasil"]
 
 
 # ---------------------------------------------------------------------------
@@ -398,13 +396,12 @@ LIMIAR_ALERTA_IMEDIATO = 7
 #
 # A diferença não é estilo. Com janela exata de uma hora, um ciclo que
 # começa às 09:00 e dura 80 minutos termina às 10:20, quando a janela já
-# fechou: o digest nunca dispara, e a fila cresce pra sempre. Foi exatamente
-# assim que 408 vagas ficaram presas no projeto original, sem nenhum digest
-# ter sido enviado uma única vez.
+# fechou: o digest nunca dispara, e a fila cresce pra sempre sem que nenhum
+# resumo seja enviado uma única vez.
 #
 # 9 UTC = o ciclo das 09:00 termina por volta das 10:20 UTC = 07:20 em
 # Brasília. Chega de manhã, com a lista da véspera pronta pra revisar.
-DIGEST_HORA_UTC = 9
+HORA_RESUMO_UTC = 9
 
 # Vaga publicada há mais de N dias não dispara alerta imediato: vai pro
 # digest com aviso de que pode já estar preenchida. Nunca é descartada —

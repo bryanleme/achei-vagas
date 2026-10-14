@@ -71,8 +71,8 @@ def do_ciclo(fontes: list[Fonte], e_primeiro_do_dia: bool) -> list[Fonte]:
 
     Fonte de cadência diária só entra na primeira execução do dia. Sem essa
     separação, o custo de todo ciclo passa a ser ditado pela fonte mais cara
-    da lista — no projeto original UMA fonte bloqueada estendia o ciclo em
-    19 minutos entregando zero vaga, oito vezes por dia.
+    da lista — UMA fonte bloqueada estenderia o ciclo em vários minutos
+    entregando zero vaga, oito vezes por dia.
     """
     return [
         f for f in fontes

@@ -1,12 +1,11 @@
 """Quando a vaga foi publicada.
 
-Por que isso tem módulo próprio: no projeto original, `publicado_em` estava
-VAZIO em 1.061 de 1.061 vagas do LinkedIn — a fonte que respondia por dois
-terços do banco. A extração existia e parecia funcionar; ela só procurava
-padrão em PORTUGUÊS ("há 4 meses", "publicada em 11/08") e o LinkedIn
-devolve o card em INGLÊS ("4 months ago"). Nunca casava, e sem data
-`vaga_antiga` sempre respondia False: vaga de quatro meses ia como alerta
-imediato, sem aviso nenhum, igual a uma publicada hoje.
+Por que isso tem módulo próprio: uma extração que procure só padrão em
+PORTUGUÊS ("há 4 meses", "publicada em 11/08") parece funcionar, mas o
+LinkedIn — uma das maiores fontes do banco — devolve o card em INGLÊS
+("4 months ago"). Nunca casaria, `publicado_em` ficaria vazio em todas as
+vagas dele, e sem data `vaga_antiga` sempre responderia False: vaga de
+quatro meses iria como alerta imediato, igual a uma publicada hoje.
 
 Medido na página 1 de um termo qualquer: 4 dos 6 primeiros resultados
 tinham mais de um mês.

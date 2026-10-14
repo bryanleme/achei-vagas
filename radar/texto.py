@@ -19,9 +19,9 @@ def normalizar(texto: str) -> str:
     """
     if not texto:
         return ""
-    sem_acento = unicodedata.normalize("NFKD", texto)
-    sem_acento = "".join(c for c in sem_acento if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", sem_acento.lower()).strip()
+    tirar_acentos = unicodedata.normalize("NFKD", texto)
+    tirar_acentos = "".join(c for c in tirar_acentos if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", tirar_acentos.lower()).strip()
 
 
 def contem_termo(termo: str, texto: str, aceitar_plural: bool = False) -> bool:

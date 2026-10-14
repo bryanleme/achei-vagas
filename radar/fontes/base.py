@@ -8,8 +8,8 @@ fonte sem tocar no ciclo.
 CADÊNCIA é o único conceito que o ciclo precisa entender além disso. Fonte
 de API custa segundos; fonte de navegador custa minutos e é o que leva
 bloqueio anti-bot. Rodar as duas na mesma frequência faz o custo do ciclo
-inteiro ser ditado pela mais cara — no projeto original UMA fonte bloqueada
-estendia o ciclo em 19 minutos entregando zero vaga.
+inteiro ser ditado pela mais cara — UMA fonte bloqueada estenderia todo
+ciclo em vários minutos entregando zero vaga.
 """
 
 import asyncio
@@ -180,10 +180,10 @@ async def get_html(url: str, params: dict | None = None):
     InfoJobs, Catho e Trabalha Brasil devolvem os cards prontos pra um GET
     simples.
 
-    A consequência é grande e vale registrar, porque contraria o que o
-    projeto original assumia: nove das onze fontes de lá abriam Chromium
-    headless, o ciclo levava mais de uma hora e o navegador era o vetor de
-    todo bloqueio anti-bot. Nada disso era necessário pra maioria delas.
+    A consequência é grande e vale registrar, porque contraria a suposição
+    comum de que scraper de vaga precisa de Chromium headless: com navegador
+    o ciclo passaria de uma hora e o navegador seria o vetor de todo
+    bloqueio anti-bot. Nada disso é necessário pra maioria das fontes.
 
     Se um portal um dia passar a montar a lista só no navegador, aí sim
     vale um scraper de Playwright — pra ele, não pra todos.
@@ -230,7 +230,7 @@ def texto_sem(elemento, *seletores: str) -> str:
     return clone.get_text(" ", strip=True)
 
 
-def texto_local(*partes: str | None) -> str:
+def texto_de_local(*partes: str | None) -> str:
     """Junta cidade/estado/país num texto de local, ignorando vazio.
 
     Fonte com campo estruturado é a exceção boa deste projeto — a maioria

@@ -13,17 +13,16 @@ Encontrada inspecionando as requisições reais do portal (o HTML servido não
 traz vaga nenhuma — a página monta no navegador). Isso importa muito mais
 que "uma fonte a menos no Playwright":
 
-  - `city`, `state` e `country` vêm em CAMPOS SEPARADOS. A classe de bug que
-    mais custou tempo no projeto original existe porque as fontes entregam
+  - `city`, `state` e `country` vêm em CAMPOS SEPARADOS. A classe de bug mais
+    traiçoeira de um radar de vagas existe porque as fontes entregam
     local como texto solto e é preciso adivinhar o que é cidade, estado e
     país. Aqui não há o que adivinhar.
 
   - `workplaceType` é "remote" / "hybrid" / "on-site". Modalidade declarada
     pela fonte, não deduzida de palavra solta no texto.
 
-  - `publishedDate` é ISO de verdade. No projeto original a data estava
-    vazia em 1.061 de 1.061 vagas do LinkedIn, e sem data toda vaga velha
-    ia como alerta imediato.
+  - `publishedDate` é ISO de verdade. Sem data, toda vaga velha iria como
+    alerta imediato — ver radar/datas.py.
 
   - `pagination.total` diz quantas vagas existem. Não é preciso descobrir o
     fim da paginação por tentativa e erro — que foi o que gerou quinze
@@ -34,7 +33,7 @@ Custo: uma requisição HTTP de milissegundos, sem navegador.
 
 from urllib.parse import urlparse
 
-from radar.fontes.base import Cadencia, Fonte, Resultado, get_json, montar, texto_local
+from radar.fontes.base import Cadencia, Fonte, Resultado, get_json, montar, texto_de_local
 
 API = "https://employability-portal.gupy.io/api/v1/jobs"
 
@@ -81,7 +80,7 @@ def _converter(item: dict, termo_busca: str = ""):
         # Remonta o texto no formato que o filtro entende, em vez de criar
         # um caminho paralelo só pra esta fonte. País incluído porque é o
         # que faz o escopo resolver pra Brasil numa vaga remota.
-        local=texto_local(item.get("city"), item.get("state"), item.get("country")),
+        local=texto_de_local(item.get("city"), item.get("state"), item.get("country")),
         link=item.get("jobUrl", ""),
         fonte="Gupy",
         modalidade=_MODALIDADE.get((item.get("workplaceType") or "").lower(), ""),
@@ -111,9 +110,8 @@ class Gupy(Fonte):
         #     não tem estado.
         #
         # Sem a segunda, todo remoto sumiria; sem a primeira, o interior
-        # sumiria. Foi exatamente esse buraco (busca nacional não alcança
-        # cidade pequena) que fez uma vaga real nunca ser notificada no
-        # projeto original.
+        # sumiria. Busca nacional não alcança cidade pequena: sem a
+        # passada por estado, vaga real do interior nunca seria notificada.
         self.estado = estado
 
     async def buscar(self, termo: str, navegador=None) -> Resultado:

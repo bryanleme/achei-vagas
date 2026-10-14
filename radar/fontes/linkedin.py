@@ -11,9 +11,8 @@ DUAS ARMADILHAS QUE JÁ CUSTARAM CARO NESTE ENDPOINT, as duas resolvidas aqui:
    lista vazia: devolve um resultado genérico dos Estados Unidos. Do lado de
    quem chama é indistinguível de sucesso.
 
-   Medido no projeto original: das 910 vagas que o LinkedIn trouxe pro perfil
-   brasileiro, 281 eram dos EUA e 19 eram do Brasil. A passada nacional nunca
-   trouxe uma vaga brasileira, por meses, sem um único erro no log.
+   Com `location=Brasil`, o grosso do resultado vem dos EUA e quase nada do
+   Brasil — e sem um único erro no log.
 
    `geoId` é o identificador interno que a busca de verdade usa por trás.
    106057199 é o Brasil, confirmado ao vivo: os resultados vêm de Belo
@@ -90,27 +89,27 @@ class LinkedIn(Fonte):
         vagas = []
 
         for card in sopa.select("li"):
-            titulo_el = card.select_one("h3")
-            link_el = card.select_one("a[href]")
-            if not titulo_el or not link_el:
+            no_titulo = card.select_one("h3")
+            no_link = card.select_one("a[href]")
+            if not no_titulo or not no_link:
                 continue
 
-            titulo = titulo_el.get_text(strip=True)
+            titulo = no_titulo.get_text(strip=True)
             # Card-modelo ainda não hidratado traz texto de espaço reservado
             # em vez de dado real. Gravar isso enche o banco de registro
             # fantasma que a deduplicação passa a considerar visto.
             if "nome da vaga" in titulo.lower():
                 continue
 
-            empresa_el = card.select_one("h4")
-            local_el = card.select_one("span.job-search-card__location")
+            no_empresa = card.select_one("h4")
+            no_local = card.select_one("span.job-search-card__location")
             tempo_el = card.select_one("time")
 
             vaga = montar(
                 titulo=titulo,
-                empresa=empresa_el.get_text(strip=True) if empresa_el else "",
-                local=local_el.get_text(strip=True) if local_el else "",
-                link=(link_el.get("href") or "").split("?")[0],
+                empresa=no_empresa.get_text(strip=True) if no_empresa else "",
+                local=no_local.get_text(strip=True) if no_local else "",
+                link=(no_link.get("href") or "").split("?")[0],
                 fonte=self.nome,
                 # NUNCA declarar modalidade aqui. O card não expõe essa
                 # informação em lugar nenhum, e inventá-la faz a vaga pular
@@ -138,8 +137,8 @@ class LinkedIn(Fonte):
             # Página que só repetiu o que já veio é o fim da lista. O
             # endpoint devolve a última página de novo em vez de vazia,
             # então parar por "veio vazia" pediria uma requisição a mais em
-            # todo termo — e foi confundir esse fim com falha que gerou
-            # quinze alarmes falsos por ciclo no projeto original.
+            # todo termo — e confundir esse fim com falha geraria alarme
+            # falso a cada ciclo.
             if not novas:
                 break
 

@@ -1,10 +1,7 @@
-"""Cada teste aqui é um bug que já aconteceu de verdade em produção.
+"""Regressões: cada teste aqui trava um bug de verdade, não um cenário
+hipotético. Se um destes voltar a falhar, o bug voltou.
 
-Não são cenários hipotéticos. Todos vêm do histórico medido do projeto que
-deu origem a este — o número de vagas afetadas está no nome ou no comentário
-de cada caso. Se um destes voltar a falhar, o bug voltou.
-
-A ordem segue as sete classes do levantamento:
+A ordem segue sete classes de bug:
 
     A. campos misturados
     B. falha silenciosa da fonte
@@ -22,7 +19,7 @@ import pytest
 from radar import caminhos, datas
 from radar.filtro import avaliar, combina
 from radar.localizacao import (
-    bate_cidade,
+    casa_cidade,
     cidade_confere,
     e_remoto,
     extrair_escopo,
@@ -58,24 +55,24 @@ def test_a1_local_remoto_de_verdade_continua_passando(regras):
 def test_a2_todo_cargo_do_config_e_realmente_buscado():
     """As listas de cargo e de termo de busca divergiram em silêncio: metade
     dos cargos filtrados nunca chegava a ser buscada de verdade, e as vagas
-    correspondentes só apareciam por acidente. Agora TERMOS_BUSCA é derivado
+    correspondentes só apareciam por acidente. Agora TERMOS_DE_BUSCA é derivado
     de CARGOS_*, então a divergência não pode voltar a existir.
     """
     from radar import config
 
     for cargo in config.CARGOS_FORTES + config.CARGOS_AMBIGUOS:
-        assert cargo.lower() in config.TERMOS_BUSCA, (
+        assert cargo.lower() in config.TERMOS_DE_BUSCA, (
             f"'{cargo}' é filtrado mas nunca é buscado"
         )
 
 
 def test_a2_termos_prioritarios_existem_na_lista_de_busca():
-    """Prioritário que não está em TERMOS_BUSCA é linha morta: sai do rodízio
+    """Prioritário que não está em TERMOS_DE_BUSCA é linha morta: sai do rodízio
     sem entrar em lugar nenhum."""
     from radar import config
 
     for termo in config.TERMOS_PRIORITARIOS:
-        assert termo in config.TERMOS_BUSCA
+        assert termo in config.TERMOS_DE_BUSCA
 
 
 # ===========================================================================
@@ -130,7 +127,7 @@ def test_e1_cidade_homonima_em_outro_estado_nao_passa(local):
 def test_e1_homonimas_reais_do_corredor_sao_barradas(local):
     """Piedade é bairro de Jaboatão/PE além de cidade em SP; Alumínio e
     Tietê batem nome fora de SP. Sem a guarda de UF, as três entram."""
-    assert bate_cidade(local, ["Piedade", "Alumínio", "Tietê"], "SP") is None
+    assert casa_cidade(local, ["Piedade", "Alumínio", "Tietê"], "SP") is None
 
 
 @pytest.mark.parametrize(
@@ -145,7 +142,7 @@ def test_e1_homonimas_reais_do_corredor_sao_barradas(local):
     ],
 )
 def test_e1_cidade_certa_passa_em_toda_grafia_real(local):
-    assert bate_cidade(local, ["Itapetininga"], "SP") == "Itapetininga"
+    assert casa_cidade(local, ["Itapetininga"], "SP") == "Itapetininga"
 
 
 def test_e2_guarda_de_uf_entende_estado_por_extenso():
@@ -237,7 +234,7 @@ def test_f2_modalidade_declarada_vence_texto_solto():
 
 
 def test_f3_preposicao_solta_nao_vira_mercado():
-    """O maior falso negativo do projeto original: 179 descartes.
+    """Falso negativo em massa por causa de uma preposição.
 
     O LinkedIn em espanhol escreve "En remoto". Removida a raiz "remot",
     sobrava "en" solto como candidato a mercado, que não resolvia pra país
@@ -303,7 +300,7 @@ def test_f3_remoto_sem_escopo_declarado_continua_passando(regras):
     resultado = avaliar(v, regras)
     assert resultado.aprovada is True
     assert resultado.escopo == set()
-    assert resultado.mercado_confirmado is False
+    assert resultado.mercado_declarado is False
 
 
 # ===========================================================================
@@ -475,7 +472,7 @@ def test_exclusao_nao_conta_como_barrada_pelo_cargo(regras):
     v = vaga(titulo="Analista de PCP (PCD)", local="Sorocaba - SP")
     resultado = avaliar(v, regras)
     assert resultado.excluida is True
-    assert resultado.bate_cargo is False
+    assert resultado.casa_cargo is False
 
 
 def test_pcd_nao_bate_dentro_de_outra_palavra(regras):
@@ -635,9 +632,9 @@ def test_e4_estado_no_texto_nao_vira_a_cidade(local, regras):
     vários outros. Substring não distingue os dois; POSIÇÃO distingue.
     """
     from radar import config
-    from radar.localizacao import bate_cidade
+    from radar.localizacao import casa_cidade
 
-    assert bate_cidade(local, config.CIDADES, "SP") is None
+    assert casa_cidade(local, config.CIDADES, "SP") is None
     assert combina(vaga(titulo="Analista de PCP", local=local), regras) is False
 
 
@@ -645,11 +642,11 @@ def test_e4_a_capital_de_verdade_continua_passando():
     """Só UMA ocorrência do estado é descartada, e é a última: "São Paulo, São
     Paulo, Brasil" é a capital mesmo."""
     from radar import config
-    from radar.localizacao import bate_cidade
+    from radar.localizacao import casa_cidade
 
-    assert bate_cidade("São Paulo, São Paulo, Brasil", config.CIDADES, "SP") == "São Paulo"
-    assert bate_cidade("São Paulo, SP", config.CIDADES, "SP") == "São Paulo"
-    assert bate_cidade("São Paulo e Região", config.CIDADES, "SP") == "São Paulo"
+    assert casa_cidade("São Paulo, São Paulo, Brasil", config.CIDADES, "SP") == "São Paulo"
+    assert casa_cidade("São Paulo, SP", config.CIDADES, "SP") == "São Paulo"
+    assert casa_cidade("São Paulo e Região", config.CIDADES, "SP") == "São Paulo"
 
 
 @pytest.mark.parametrize(
@@ -669,6 +666,6 @@ def test_e4_cidade_de_verdade_nao_foi_quebrada(local, esperado):
     funcionavam — inclusive cidade com espaço no nome, que não pode ser
     partida pelo separador."""
     from radar import config
-    from radar.localizacao import bate_cidade
+    from radar.localizacao import casa_cidade
 
-    assert bate_cidade(local, config.CIDADES, "SP") == esperado
+    assert casa_cidade(local, config.CIDADES, "SP") == esperado

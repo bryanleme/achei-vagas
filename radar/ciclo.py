@@ -22,7 +22,7 @@ from radar.alertas import telegram
 from radar.filtro import Regras, avaliar, barrada_so_pelo_cargo
 from radar.fontes import registro
 from radar.fontes.base import Resultado, com_protecao
-from radar.localizacao import bate_cidade
+from radar.localizacao import casa_cidade
 from radar.log import logger
 from radar.relevancia import pontuar
 
@@ -38,12 +38,12 @@ def regras_do_perfil() -> Regras:
         cargos_fortes=config.CARGOS_FORTES,
         cargos_ambiguos=config.CARGOS_AMBIGUOS,
         qualificadores_dominio=config.QUALIFICADORES_DOMINIO,
-        ferramentas_titulo=config.FERRAMENTAS_TITULO,
-        qualificadores_cargo=config.QUALIFICADORES_CARGO,
+        ferramentas_de_cargo=config.FERRAMENTAS_DE_CARGO,
+        palavras_de_cargo=config.PALAVRAS_DE_CARGO,
         cidades=config.CIDADES,
         uf_esperada=config.UF_BUSCA,
         aceita_remoto=config.ACEITA_REMOTO,
-        mercados_remoto_aceitos=config.MERCADOS_REMOTO_ACEITOS,
+        paises_remoto_permitidos=config.PAISES_REMOTO_PERMITIDOS,
         exclusoes_titulo=config.EXCLUSOES_TITULO,
     )
 
@@ -52,29 +52,29 @@ def regras_do_perfil() -> Regras:
 # Rodízio de termos
 # ---------------------------------------------------------------------------
 
-def termos_do_ciclo() -> list[str]:
+def termos_desta_rodada() -> list[str]:
     """Os prioritários SEMPRE, mais um bloco do rodízio.
 
-    Por que os prioritários saem do rodízio: no projeto original todos os
-    termos disputavam vez por igual, em ordem alfabética. Com 44 termos e 10
-    por ciclo, uma volta completa levava 13 horas — e o termo que dava nome
-    ao perfil inteiro era buscado uma vez a cada 13 horas, disputando lugar
-    com termos de ferramenta obscura. Uma vaga real, que passava no filtro
-    sem esforço, nunca chegou a ser BUSCADA. Não foi bug de filtro nem de
-    deduplicação: ela simplesmente nunca entrou numa consulta.
+    Por que os prioritários saem do rodízio: se todos os termos disputassem
+    vez por igual, com ~44 termos e 10 por ciclo uma volta completa levaria
+    13 horas — e o termo que dá nome ao perfil inteiro seria buscado uma vez
+    a cada 13 horas, disputando lugar com termos de ferramenta obscura. Uma
+    vaga real, que passaria no filtro sem esforço, poderia nunca ser
+    BUSCADA. Não seria bug de filtro nem de deduplicação: ela simplesmente
+    nunca entraria numa consulta.
 
     Prioritário custa alguns segundos por ciclo e sobe a cobertura dos
     termos que importam de 1x a cada 13h para 8x por dia.
     """
-    prioritarios = [t for t in config.TERMOS_PRIORITARIOS if t in config.TERMOS_BUSCA]
-    resto = [t for t in config.TERMOS_BUSCA if t not in prioritarios]
+    prioritarios = [t for t in config.TERMOS_PRIORITARIOS if t in config.TERMOS_DE_BUSCA]
+    resto = [t for t in config.TERMOS_DE_BUSCA if t not in prioritarios]
 
     if not resto:
         return prioritarios
 
     salvo = deposito.ler(CHAVE_RODIZIO)
     offset = int(salvo) % len(resto) if salvo else 0
-    tamanho = min(config.TERMOS_POR_CICLO, len(resto))
+    tamanho = min(config.TERMOS_POR_RODADA, len(resto))
 
     bloco = [resto[(offset + i) % len(resto)] for i in range(tamanho)]
 
@@ -121,11 +121,10 @@ def deve_enviar_digest(agora: datetime | None = None) -> bool:
 
     Com janela exata (`agora.hour == HORA`), um ciclo que começa às 09:00 e
     dura 80 minutos termina às 10:20, quando a janela já fechou. O digest
-    nunca dispara. E a rede de segurança que existia pra esse caso ("se
-    pulou um dia, manda no ciclo seguinte") exigia um envio anterior
-    registrado — ou seja, dependia exatamente daquilo que deveria consertar,
-    e nunca ligou. Foi assim que 408 vagas ficaram presas na fila, sem nunca
-    chegar ao Telegram, e ninguém notou porque não havia erro nenhum.
+    nunca dispara. E uma rede de segurança do tipo "se pulou um dia, manda
+    no ciclo seguinte" exigiria um envio anterior registrado — ou seja,
+    dependeria exatamente daquilo que deveria consertar, e nunca ligaria. A
+    fila cresceria sem nunca chegar ao Telegram, sem erro nenhum.
 
     A formulação atual não precisa de rede de segurança: se o ciclo das
     09:00 falhar, o das 12:00 manda, porque "já passou de 9" continua
@@ -134,7 +133,7 @@ def deve_enviar_digest(agora: datetime | None = None) -> bool:
     agora = agora or datetime.now(timezone.utc)
     if deposito.ja_feito_hoje(CHAVE_DIGEST, agora.date()):
         return False
-    return agora.hour >= config.DIGEST_HORA_UTC
+    return agora.hour >= config.HORA_RESUMO_UTC
 
 
 def enviar_digest_se_for_hora(agora: datetime | None = None) -> int:
@@ -149,7 +148,7 @@ def enviar_digest_se_for_hora(agora: datetime | None = None) -> int:
         deposito.marcar_feito_hoje(CHAVE_DIGEST, agora.date())
         return 0
 
-    if telegram.enviar_digest(pendentes):
+    if telegram.enviar_resumo(pendentes):
         deposito.limpar_fila_do_digest()
         deposito.marcar_feito_hoje(CHAVE_DIGEST, agora.date())
         logger.info("Resumo diário enviado: %d vaga(s).", len(pendentes))
@@ -249,7 +248,7 @@ async def rodar(so_teste: bool = False) -> dict:
         if processados:
             logger.info("%d resposta(s) de 👍/👎 registrada(s).", processados)
 
-    termos = termos_do_ciclo()
+    termos = termos_desta_rodada()
     todas = registro.fontes_ativas()
     fontes = registro.do_ciclo(todas, _primeiro_ciclo_do_dia(agora))
 
@@ -261,7 +260,7 @@ async def rodar(so_teste: bool = False) -> dict:
     aprovadas = 0
     novas = 0
     com_problema: list[str] = []
-    descartes_escopo: Counter = Counter()
+    rejeitadas_por_mercado: Counter = Counter()
     barradas_pelo_titulo = 0
     sem_mercado_declarado = 0
     excluidas = 0
@@ -287,7 +286,7 @@ async def rodar(so_teste: bool = False) -> dict:
             com_problema.append(fonte.nome)
 
         aprovadas_da_fonte = 0
-        novas_da_fonte = 0
+        ineditas_da_fonte = 0
 
         for vaga in vagas_da_fonte:
             # Descoberta de empresa acontece ANTES do filtro e independe
@@ -296,7 +295,7 @@ async def rodar(so_teste: bool = False) -> dict:
             # Tatuí que hoje publicou "Soldador" é exatamente a empresa que
             # mês que vem publica "Analista de PCP" — filtrar a descoberta
             # por cargo descartaria as empresas certas pela vaga errada.
-            cidade_da_vaga = bate_cidade(vaga.local, config.CIDADES, config.UF_BUSCA)
+            cidade_da_vaga = casa_cidade(vaga.local, config.CIDADES, config.UF_BUSCA)
             if cidade_da_vaga and vaga.empresa:
                 deposito.registrar_empresa(
                     vaga.empresa, vaga.fonte, cidade_da_vaga, vaga.empresa_url
@@ -305,7 +304,7 @@ async def rodar(so_teste: bool = False) -> dict:
             resultado = avaliar(vaga, regras)
 
             if resultado.escopo_rejeitado:
-                descartes_escopo.update(resultado.escopo_rejeitado)
+                rejeitadas_por_mercado.update(resultado.escopo_rejeitado)
 
             if resultado.excluida:
                 excluidas += 1
@@ -323,7 +322,7 @@ async def rodar(so_teste: bool = False) -> dict:
             if (
                 fonte.exige_mercado_declarado
                 and resultado.remota
-                and not resultado.mercado_confirmado
+                and not resultado.mercado_declarado
             ):
                 sem_mercado_declarado += 1
                 continue
@@ -348,7 +347,7 @@ async def rodar(so_teste: bool = False) -> dict:
             if chave:
                 ja_notificadas.add(chave)
 
-            if deposito.ja_vista(vaga):
+            if deposito.vaga_conhecida(vaga):
                 continue
 
             nota = pontuar(
@@ -383,7 +382,7 @@ async def rodar(so_teste: bool = False) -> dict:
                     nota.total, vaga.titulo, vaga.empresa, vaga.local,
                 )
                 novas += 1
-                novas_da_fonte += 1
+                ineditas_da_fonte += 1
                 continue
 
             if imediata:
@@ -404,11 +403,11 @@ async def rodar(so_teste: bool = False) -> dict:
                 vaga, nota.total, str(nota), digest_pendente=not imediata
             )
             novas += 1
-            novas_da_fonte += 1
+            ineditas_da_fonte += 1
 
         logger.info(
             "[%s] %d brutas → %d aprovadas → %d novas%s",
-            fonte.nome, len(vagas_da_fonte), aprovadas_da_fonte, novas_da_fonte,
+            fonte.nome, len(vagas_da_fonte), aprovadas_da_fonte, ineditas_da_fonte,
             f" ({falhas} termo(s) com falha)" if falhas else "",
         )
 
@@ -417,10 +416,10 @@ async def rodar(so_teste: bool = False) -> dict:
     )
 
     # Diagnóstico que só existe se for medido. Escopo mal reconhecido barra
-    # a vaga do jeito certo e some sem rastro — foi assim que um falso
-    # negativo de 179 vagas passou despercebido no projeto original.
-    if descartes_escopo:
-        detalhe = "; ".join(f"{m} ({n})" for m, n in descartes_escopo.most_common())
+    # a vaga do jeito certo e some sem rastro — um falso negativo em massa
+    # passaria despercebido sem esta linha.
+    if rejeitadas_por_mercado:
+        detalhe = "; ".join(f"{m} ({n})" for m, n in rejeitadas_por_mercado.most_common())
         logger.info("Descartadas por mercado: %s", detalhe)
     if excluidas:
         logger.info(

@@ -6,7 +6,7 @@ onde dá pra investigar o que aconteceu num ciclo que rodou às 3 da manhã.
 O que NÃO se loga aqui está documentado em alertas/telegram.py: a exceção
 crua do `requests` inclui a URL que falhou, e a URL da Bot API tem o token
 embutido. Logar `f"{e}"` num except vaza a credencial pro log público da
-execução. Aconteceu seis vezes no projeto original.
+execução.
 """
 
 import logging

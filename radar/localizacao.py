@@ -1,7 +1,7 @@
 """Onde a vaga é — modalidade, cidade e escopo de mercado da vaga remota.
 
-Este módulo concentra a classe de bug que mais custou tempo no projeto que
-deu origem a este. Vale saber por quê: as fontes entregam localização como
+Este módulo concentra a classe de bug mais traiçoeira de um radar de vagas.
+Vale saber por quê: as fontes entregam localização como
 TEXTO SOLTO, cada uma no seu formato — "En remoto", "Mostoles, Madrid",
 "Itapetininga - SP", "Sorocaba, São Paulo, Brazil", "100% Remoto",
 "Bloomington, IN". Não existe campo estruturado. Tudo aqui é adivinhação
@@ -10,10 +10,9 @@ ou foi barrado errado.
 
 Três invariantes que o resto do projeto depende:
 
-  1. Nada aqui lê o TÍTULO da vaga. Nunca. O bug original desta família era
-     título e local concatenados num texto só: vaga americana com "Hybrid
-     Remote" no título batia "remot" e passava como remota, com
-     local="Bloomington, IN".
+  1. Nada aqui lê o TÍTULO da vaga. Nunca. Com título e local concatenados
+     num texto só, vaga americana com "Hybrid Remote" no título bateria
+     "remot" e passaria como remota, com local="Bloomington, IN".
 
   2. Campo declarado pela fonte vence texto adivinhado. Se a fonte diz
      modalidade="Híbrido", a palavra "remoto" solta no texto de local não
@@ -39,9 +38,8 @@ PRESENCIAL = "Presencial"
 
 # Vocabulário de trabalho remoto como aparece no CAMPO DE LOCAL das fontes.
 # Inclui as formas que uma fonte brasileira escreve em vez de "Remoto" —
-# cada uma delas foi vaga real rejeitada por engano no projeto original,
-# porque a checagem exigia o campo `modalidade` preenchido e nem toda fonte
-# preenche.
+# sem elas, vaga real seria rejeitada por engano sempre que a fonte não
+# preenche o campo `modalidade`, e nem toda fonte preenche.
 VOCABULARIO_REMOTO = [
     "remoto",
     "remota",
@@ -94,9 +92,9 @@ def e_remoto(modalidade: str, local: str) -> bool:
       local (acontece: "Sorocaba - presencial, remoto em exceção").
 
     - Modalidade vazia cai pro texto. Sem esse recurso, `local="Home
-      Office"` com modalidade vazia era REJEITADA no projeto original, e
-      todo o VOCABULARIO_REMOTO acima ficava inalcançável — uma lista que
-      existia exatamente pra ser consultada e nunca era.
+      Office"` com modalidade vazia seria REJEITADA, e todo o
+      VOCABULARIO_REMOTO acima ficaria inalcançável — uma lista que existe
+      exatamente pra ser consultada e nunca seria.
     """
     declarada = classificar_modalidade(modalidade)
     if declarada:
@@ -120,11 +118,10 @@ SIGLAS_UF = {
 # local em INGLÊS mesmo pra vaga brasileira ("Sorocaba, São Paulo, Brazil",
 # mas também "Brasilia, Federal District").
 #
-# Isto não é preciosismo. No projeto original a guarda de UF só entendia
-# SIGLA de duas letras, e o formato do LinkedIn é por extenso — ou seja, a
-# guarda estava furada exatamente na fonte que respondia por 1.061 das
-# 1.532 vagas do banco. A mesma vaga passava ou era barrada dependendo só
-# de como a fonte escrevia o estado.
+# Isto não é preciosismo. Uma guarda de UF que só entenda SIGLA de duas
+# letras fica furada exatamente no LinkedIn, que escreve por extenso e é
+# uma das maiores fontes do banco. A mesma vaga passaria ou seria barrada
+# dependendo só de como a fonte escreveu o estado.
 NOME_DO_ESTADO = {
     "acre": "ac",
     "alagoas": "al",
@@ -190,7 +187,7 @@ def uf_declarada(local: str) -> str | None:
 def cidade_confere(local: str, uf_esperada: str) -> bool:
     """O nome da cidade bateu — mas é MESMO aquela cidade?
 
-    Nome batido não basta. Casos reais que passavam no projeto original:
+    Nome batido não basta. Casos reais que passariam sem esta checagem:
 
         "CAMPINA GRANDE DO SUL - PR"  aceita como Campina Grande/PB
         "Recife - SP"                 aceita como Recife/PE
@@ -266,7 +263,7 @@ def _segmentos_de_cidade(local: str) -> list[str]:
     ]
 
 
-def bate_cidade(local: str, cidades: list[str], uf_esperada: str) -> str | None:
+def casa_cidade(local: str, cidades: list[str], uf_esperada: str) -> str | None:
     """Devolve o nome da cidade aceita que bate com o texto, ou None."""
     if not cidade_confere(local, uf_esperada):
         return None
@@ -394,9 +391,8 @@ _SEM_RESTRICAO = {"anywhere", "worldwide", "global"}
 # Este é o item mais caro da lista. O LinkedIn em espanhol escreve
 # "En remoto" e "España (En remoto)" — depois de remover a raiz "remot",
 # sobrava "en" solto como candidato a mercado, que não resolvia pra país
-# nenhum e virava escopo desconhecido. Só isso foram 179 descartes no
-# projeto original, o segundo maior motivo de rejeição do sistema inteiro,
-# e todas eram vagas de um mercado aceito.
+# nenhum e virava escopo desconhecido — vaga de mercado aceito descartada
+# em volume, por causa de uma preposição.
 #
 # ATENÇÃO ao mexer aqui: "in" e "at" são preposição em inglês E sigla de
 # estado americano (Indiana, e nenhuma pra "at"). O desempate não está

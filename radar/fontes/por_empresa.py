@@ -152,12 +152,12 @@ class VagasComPorEmpresa(VarreduraPorEmpresa):
         sopa = await get_html(url or f"{self.BASE}/vagas-de-{_slug(nome)}")
         vagas = []
         for card in sopa.select("li.vaga"):
-            link_el = card.select_one("h2.cargo a")
-            if not link_el:
+            no_link = card.select_one("h2.cargo a")
+            if not no_link:
                 continue
-            href = link_el.get("href") or ""
+            href = no_link.get("href") or ""
             vagas.append(montar(
-                titulo=link_el.get("title") or link_el.get_text(strip=True),
+                titulo=no_link.get("title") or no_link.get_text(strip=True),
                 empresa=nome,
                 local=texto_sem(card.select_one("div.vaga-local"), ".tooltip-place"),
                 link=f"{self.BASE}{href}" if href.startswith("/") else href,
@@ -209,12 +209,12 @@ class InfoJobsPorEmpresa(VarreduraPorEmpresa):
         sopa = await get_html(url)
         vagas = []
         for bloco in sopa.select("div.link-item"):
-            link_el = bloco.select_one('a[href*="/vaga-de-"]')
-            if not link_el:
+            no_link = bloco.select_one('a[href*="/vaga-de-"]')
+            if not no_link:
                 continue
-            href = link_el.get("href") or ""
+            href = no_link.get("href") or ""
             vagas.append(montar(
-                titulo=link_el.get_text(strip=True),
+                titulo=no_link.get_text(strip=True),
                 empresa=nome,
                 local=self._cidade_do_endereco(href),
                 link=f"{self.BASE}{href}" if href.startswith("/") else href,

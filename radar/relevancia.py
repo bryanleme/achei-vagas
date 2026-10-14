@@ -95,20 +95,20 @@ def pontuar(
     total = 0
     motivos: list[str] = []
 
-    if avaliacao.bate_cargo_forte:
+    if avaliacao.casa_cargo_forte:
         total += PESO_CARGO_FORTE
         motivos.append("cargo direto")
-    elif avaliacao.bate_cargo_ambiguo:
+    elif avaliacao.casa_cargo_ambiguo:
         total += PESO_CARGO_AMBIGUO
         motivos.append("cargo + domínio")
-    elif avaliacao.bate_ferramenta:
+    elif avaliacao.casa_ferramenta:
         total += PESO_FERRAMENTA
         motivos.append("ferramenta + cargo")
 
     # Segundo sinal só conta pra quem entrou por cargo forte. Quem entrou
     # por cargo ambíguo já usou o qualificador de domínio pra ser aprovado —
     # contar de novo aqui seria pagar duas vezes pelo mesmo sinal.
-    if avaliacao.bate_cargo_forte and contem_qualquer(
+    if avaliacao.casa_cargo_forte and contem_qualquer(
         regras.qualificadores_dominio, normalizar(vaga.titulo), aceitar_plural=True
     ):
         total += PESO_DOMINIO_EXTRA
@@ -133,7 +133,7 @@ def pontuar(
         else:
             total += PESO_CIDADE_REGIAO
             motivos.append(avaliacao.cidade)
-    elif avaliacao.mercado_confirmado:
+    elif avaliacao.mercado_declarado:
         total += PESO_REMOTO_MERCADO_CONFIRMADO
         motivos.append("remoto Brasil")
     elif avaliacao.remota:

@@ -16,12 +16,12 @@ def regras() -> Regras:
         cargos_fortes=config.CARGOS_FORTES,
         cargos_ambiguos=config.CARGOS_AMBIGUOS,
         qualificadores_dominio=config.QUALIFICADORES_DOMINIO,
-        ferramentas_titulo=config.FERRAMENTAS_TITULO,
-        qualificadores_cargo=config.QUALIFICADORES_CARGO,
+        ferramentas_de_cargo=config.FERRAMENTAS_DE_CARGO,
+        palavras_de_cargo=config.PALAVRAS_DE_CARGO,
         cidades=config.CIDADES,
         uf_esperada=config.UF_BUSCA,
         aceita_remoto=config.ACEITA_REMOTO,
-        mercados_remoto_aceitos=config.MERCADOS_REMOTO_ACEITOS,
+        paises_remoto_permitidos=config.PAISES_REMOTO_PERMITIDOS,
         exclusoes_titulo=config.EXCLUSOES_TITULO,
     )
 

@@ -2,24 +2,24 @@
 
 Por que isso é um módulo próprio em vez de uma linha em config.py:
 
-No projeto que deu origem a este, o caminho do banco era calculado como
-`os.path.join(os.path.dirname(__file__), "data", "jobs.db")`. Quando o
-config.py foi movido da raiz pra uma subpasta numa reorganização, o banco
-se mudou junto, em silêncio — `data/jobs.db` virou `core/data/jobs.db`.
+Calcular o caminho do banco como
+`os.path.join(os.path.dirname(__file__), "data", "vagas.db")` amarra o banco
+à pasta do módulo. Basta mover o arquivo pra uma subpasta numa reorganização
+e o banco se muda junto, em silêncio.
 
-O estrago medido:
+O estrago seria:
 
-  - o banco real, versionado, ficou órfão: ninguém mais escrevia nele;
-  - o novo nasceu vazio a cada execução, porque a pasta não existe no
+  - o banco real, versionado, fica órfão: ninguém mais escreve nele;
+  - o novo nasce vazio a cada execução, porque a pasta não existe no
     repositório;
   - com banco vazio, TODA vaga vira "nova" — renotificação a cada 3 horas;
-  - o rodízio de termos travou no offset 0: só os 10 primeiros termos de 44
-    eram buscados, pra sempre;
-  - a fila do digest era descartada a cada ciclo;
-  - e o passo `git add data/jobs.db` do workflow não via mudança nenhuma,
-    então o estado nunca mais persistia.
+  - o rodízio de termos trava no offset 0: só o primeiro bloco de termos
+    é buscado, pra sempre;
+  - a fila do digest é descartada a cada ciclo;
+  - e o passo `git add data/vagas.db` do workflow não vê mudança nenhuma,
+    então o estado nunca mais persiste.
 
-Nada disso deu erro. Tudo continuou "verde".
+Nada disso daria erro. Tudo continuaria "verde".
 
 RAIZ sobe um nível a partir de radar/, então o caminho deixa de depender de
 onde este arquivo mora. Mover ou renomear módulo não move mais o banco

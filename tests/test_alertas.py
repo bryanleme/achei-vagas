@@ -1,9 +1,8 @@
 """Testes do que decide se uma mensagem chega em você.
 
-Este arquivo existe por um motivo específico. No projeto original o resumo
-diário NUNCA foi enviado — nenhuma vez, desde que o recurso foi escrito.
-408 vagas ficaram presas na fila. E havia testes do CONTEÚDO do resumo: eles
-passavam, verdes, o tempo todo. Não havia nenhum teste do DISPARO.
+Este arquivo existe por um motivo específico. Um resumo diário pode NUNCA
+ser enviado — nenhuma vez — enquanto testes do CONTEÚDO do resumo passam,
+verdes, o tempo todo. O que pega isso é testar o DISPARO.
 
 Testar o que a mensagem diz sem testar se ela sai é testar a metade que não
 quebra.
@@ -40,7 +39,7 @@ def test_g1_resumo_sai_quando_o_ciclo_termina_depois_da_hora():
     ciclo dura ~80 minutos, então quando a função rodava já era 10h. A
     janela nunca estava aberta.
     """
-    assert config.DIGEST_HORA_UTC == 9
+    assert config.HORA_RESUMO_UTC == 9
     assert ciclo.deve_enviar_digest(_em(10)) is True  # ciclo das 9h terminando
     assert ciclo.deve_enviar_digest(_em(13)) is True  # ciclo das 12h, recuperação
     assert ciclo.deve_enviar_digest(_em(23)) is True  # tarde, mas ainda hoje
@@ -65,10 +64,10 @@ def test_g1_no_dia_seguinte_volta_a_sair():
 
 
 def test_g1_sem_rede_de_seguranca_circular():
-    """A rede de segurança original ("se pulou um dia, manda no ciclo
-    seguinte") exigia um envio anterior REGISTRADO — dependia exatamente
+    """Uma rede de segurança do tipo "se pulou um dia, manda no ciclo
+    seguinte" exigiria um envio anterior REGISTRADO — dependeria exatamente
     daquilo que deveria consertar. Com a fila nunca esvaziada e nenhum envio
-    anterior, ela nunca ligava.
+    anterior, ela nunca ligaria.
 
     A formulação atual não tem estado anterior nenhum como pré-requisito:
     banco recém-criado, sem nenhum envio na história, já manda.
@@ -161,7 +160,7 @@ def test_digest_quebra_em_partes_quando_passa_do_limite():
          f"https://exemplo.com/{i}", 6, "Salto de Pirapora - SP", "Vagas.com", "")
         for i in range(telegram.LIMITE_VAGAS_DIGEST)
     ]
-    partes = telegram.montar_digest(vagas)
+    partes = telegram.montar_resumo(vagas)
     assert len(partes) > 1
     assert all(len(p) <= telegram.LIMITE_MENSAGEM + 300 for p in partes)
     assert "parte 1/" in partes[0]
@@ -172,7 +171,7 @@ def test_digest_quebra_em_partes_quando_passa_do_limite():
 
 
 def test_digest_vazio_nao_gera_mensagem():
-    assert telegram.montar_digest([]) == []
+    assert telegram.montar_resumo([]) == []
 
 
 # ===========================================================================
@@ -180,17 +179,17 @@ def test_digest_vazio_nao_gera_mensagem():
 # ===========================================================================
 
 def test_callback_de_feedback_e_parseado():
-    assert telegram.parsear_callback("fb|1|abc123") == ("abc123", "positivo")
-    assert telegram.parsear_callback("fb|0|abc123") == ("abc123", "negativo")
+    assert telegram.parsear_callback("v|s|abc123") == ("abc123", "positivo")
+    assert telegram.parsear_callback("v|n|abc123") == ("abc123", "negativo")
 
 
 @pytest.mark.parametrize(
     "data",
-    ["fb|ok|-", "", "outro|1|x", "fb|2|x", "fb|1", "fb|1|x|y", None],
+    ["v|ok|-", "", "outro|1|x", "v|2|x", "v|s", "v|s|x|y", None],
 )
 def test_callback_desconhecido_nao_vira_feedback(data):
     """O botão de confirmação que substitui o teclado depois do clique usa
-    'fb|ok|-' de propósito: ele não pode ser lido como voto novo."""
+    'v|ok|-' de propósito: ele não pode ser lido como voto novo."""
     assert telegram.parsear_callback(data) is None
 
 
@@ -311,7 +310,7 @@ def test_resumo_nao_vira_enxurrada():
     vagas = [(f"Analista de Processos {i}", "Empresa Muito Longa S.A. do Brasil",
               f"https://exemplo.com/{i}", 9 - (i % 9), "Sorocaba - SP", "Gupy", "")
              for i in range(382)]
-    partes = telegram.montar_digest(vagas)
+    partes = telegram.montar_resumo(vagas)
     assert len(partes) <= 4, f"{len(partes)} mensagens é enxurrada"
     assert "as 40 melhores de 382" in partes[0]
 
@@ -320,7 +319,7 @@ def test_resumo_curto_nao_mente_sobre_o_total():
     """Fila menor que o teto não pode dizer "as N melhores de N"."""
     vagas = [(f"Analista {i}", "Empresa", f"https://exemplo.com/{i}", 8,
               "Tatuí - SP", "Vagas.com", "") for i in range(5)]
-    partes = telegram.montar_digest(vagas)
+    partes = telegram.montar_resumo(vagas)
     assert len(partes) == 1
     assert "5 vaga(s)" in partes[0]
     assert "melhores" not in partes[0]
@@ -332,5 +331,5 @@ def test_resumo_manda_as_de_maior_relevancia():
     vagas = ([("BOA", "E", "https://x/boa", 10, "Sorocaba", "Gupy", "")]
              + [(f"fraca {i}", "E", f"https://x/{i}", 2, "Sorocaba", "Gupy", "")
                 for i in range(100)])
-    juntas = "\n".join(telegram.montar_digest(vagas))
+    juntas = "\n".join(telegram.montar_resumo(vagas))
     assert "https://x/boa" in juntas

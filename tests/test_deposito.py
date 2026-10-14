@@ -23,18 +23,18 @@ def _guardar(v, relevancia=8, digest=False):
 
 def test_dedup_pelo_link():
     v = vaga()
-    assert deposito.ja_vista(v) is False
+    assert deposito.vaga_conhecida(v) is False
     _guardar(v)
-    assert deposito.ja_vista(v) is True
+    assert deposito.vaga_conhecida(v) is True
 
 
 def test_dedup_por_empresa_e_titulo_em_fonte_diferente():
     """A MESMA vaga aparece na Gupy e no LinkedIn com links diferentes. Sem a
     segunda chave, ela notifica duas vezes.
 
-    No projeto original a coluna dessa chave foi adicionada por migração sem
-    preencher o histórico: 373 linhas ficaram NULL, e `WHERE chave = ?` nunca
-    bate contra NULL em SQL — 52 vagas duplicadas voltaram a notificar.
+    A chave nasce no esquema, nunca por migração: coluna adicionada sem
+    preencher o histórico fica NULL, e `WHERE chave = ?` nunca bate contra
+    NULL em SQL — vaga duplicada voltaria a notificar.
     """
     primeira = vaga(link="https://gupy.io/job/1", fonte="Gupy")
     _guardar(primeira)
@@ -42,7 +42,7 @@ def test_dedup_por_empresa_e_titulo_em_fonte_diferente():
     republicada = vaga(link="https://linkedin.com/jobs/999", fonte="LinkedIn")
     assert republicada.id != primeira.id
     assert republicada.chave_secundaria == primeira.chave_secundaria
-    assert deposito.ja_vista(republicada) is True
+    assert deposito.vaga_conhecida(republicada) is True
 
 
 def test_chave_secundaria_nunca_e_nula():
@@ -124,23 +124,23 @@ def test_fila_so_e_limpa_depois_do_envio_confirmado():
 # ===========================================================================
 
 def test_g2_prioritarios_entram_em_todo_ciclo():
-    """No projeto original todos os termos disputavam vez por igual, em ordem
-    alfabética: com 44 termos e 10 por ciclo, o termo que dava nome ao perfil
-    era buscado uma vez a cada 13 horas. Uma vaga real, que passava no filtro
-    sem esforço, nunca chegou a ser BUSCADA."""
+    """Se todos os termos disputassem vez por igual, com ~44 termos e 10 por
+    ciclo o termo que dá nome ao perfil seria buscado uma vez a cada 13
+    horas. Uma vaga real, que passaria no filtro sem esforço, poderia nunca
+    ser BUSCADA."""
     for _ in range(5):
-        termos = ciclo.termos_do_ciclo()
+        termos = ciclo.termos_desta_rodada()
         for prioritario in config.TERMOS_PRIORITARIOS:
             assert prioritario in termos
 
 
 def test_g2_prioritario_nao_ocupa_vaga_do_rodizio():
-    termos = ciclo.termos_do_ciclo()
-    assert len(termos) == len(config.TERMOS_PRIORITARIOS) + config.TERMOS_POR_CICLO
+    termos = ciclo.termos_desta_rodada()
+    assert len(termos) == len(config.TERMOS_PRIORITARIOS) + config.TERMOS_POR_RODADA
 
 
 def test_g2_nenhum_termo_repetido_no_mesmo_ciclo():
-    termos = ciclo.termos_do_ciclo()
+    termos = ciclo.termos_desta_rodada()
     assert len(termos) == len(set(termos))
 
 
@@ -148,11 +148,11 @@ def test_g2_rodizio_cobre_todos_os_termos_com_o_tempo():
     """O bloco avança a cada ciclo. Depois de voltas suficientes, todo termo
     da lista precisa ter sido buscado pelo menos uma vez."""
     vistos = set()
-    resto = [t for t in config.TERMOS_BUSCA if t not in config.TERMOS_PRIORITARIOS]
-    ciclos = len(resto) // config.TERMOS_POR_CICLO + 2
+    resto = [t for t in config.TERMOS_DE_BUSCA if t not in config.TERMOS_PRIORITARIOS]
+    ciclos = len(resto) // config.TERMOS_POR_RODADA + 2
     for _ in range(ciclos):
-        vistos.update(ciclo.termos_do_ciclo())
-    assert set(config.TERMOS_BUSCA) <= vistos
+        vistos.update(ciclo.termos_desta_rodada())
+    assert set(config.TERMOS_DE_BUSCA) <= vistos
 
 
 def test_feedback_e_gravado_na_vaga():
@@ -176,10 +176,10 @@ def test_vaga_confidencial_nao_engole_outra_do_mesmo_titulo():
     assert segunda.chave_secundaria == ""
 
     _guardar(primeira)
-    assert deposito.ja_vista(segunda) is False, "vaga distinta foi engolida"
+    assert deposito.vaga_conhecida(segunda) is False, "vaga distinta foi engolida"
     _guardar(segunda)
-    assert deposito.ja_vista(primeira) is True
-    assert deposito.ja_vista(segunda) is True
+    assert deposito.vaga_conhecida(primeira) is True
+    assert deposito.vaga_conhecida(segunda) is True
 
 
 def test_com_empresa_a_segunda_chave_volta_a_valer():
@@ -187,7 +187,7 @@ def test_com_empresa_a_segunda_chave_volta_a_valer():
     a = vaga(empresa="Yazaki", link="https://gupy.io/1")
     b = vaga(empresa="Yazaki", link="https://vagas.com.br/2")
     _guardar(a)
-    assert deposito.ja_vista(b) is True
+    assert deposito.vaga_conhecida(b) is True
 
 
 def test_varredura_inicial_segura_o_alerta_imediato():
@@ -202,10 +202,10 @@ def test_varredura_inicial_segura_o_alerta_imediato():
     """
     assert ciclo.em_varredura_inicial() is True
 
-    resto = [t for t in config.TERMOS_BUSCA if t not in config.TERMOS_PRIORITARIOS]
-    ciclos = -(-len(resto) // config.TERMOS_POR_CICLO)
+    resto = [t for t in config.TERMOS_DE_BUSCA if t not in config.TERMOS_PRIORITARIOS]
+    ciclos = -(-len(resto) // config.TERMOS_POR_RODADA)
     for _ in range(ciclos):
-        ciclo.termos_do_ciclo()
+        ciclo.termos_desta_rodada()
 
     assert ciclo.em_varredura_inicial() is False, (
         "depois de cobrir todos os termos, o alerta imediato precisa ligar"
@@ -297,10 +297,10 @@ def test_cidade_extraida_bate_com_o_filtro():
     """A extração só serve se o formato que ela produz for entendido pelo
     filtro de cidade — que normaliza acento e caixa, mas não hífen."""
     from radar.fontes.por_empresa import InfoJobsPorEmpresa as F
-    from radar.localizacao import bate_cidade
+    from radar.localizacao import casa_cidade
 
     cidade = F._cidade_do_endereco("/vaga-de-analista-em-salto-de-pirapora__9.aspx")
-    assert bate_cidade(cidade, ["Salto de Pirapora"], "SP") == "Salto de Pirapora"
+    assert casa_cidade(cidade, ["Salto de Pirapora"], "SP") == "Salto de Pirapora"
 
 
 def test_url_de_empresa_e_preservada_quando_um_card_vem_sem_ela():

@@ -49,8 +49,8 @@ def _chamar(metodo: str, payload: dict) -> dict | None:
     NUNCA logue `str(e)` nem a URL num except aqui. A URL é
     `.../bot<TOKEN>/sendMessage` — o token está DENTRO dela — e a mensagem
     padrão de erro de conexão do requests/urllib3 inclui a URL completa que
-    falhou. No projeto original isso vazou o token do bot seis vezes pro
-    log da execução do GitHub Actions, que é público quando o repositório é.
+    falhou. Logar isso vaza o token do bot pro log da execução do GitHub
+    Actions, que é público quando o repositório é.
 
     HTTPError tem `.response`, com status e motivo e nenhum token. Qualquer
     outra RequestException nunca chegou a ter resposta: loga-se só o TIPO da
@@ -169,18 +169,18 @@ def local_legivel(local: str, modalidade: str) -> str:
     return f"Remoto · {local}"
 
 
-def _teclado_feedback(vaga_id: str) -> dict:
+def _botoes_de_voto(vaga_id: str) -> dict:
     """Botões 👍/👎 na notificação.
 
     O `callback_data` carrega direção e id porque o clique que volta do
     Telegram não tem como saber de qual vaga é — a mensagem em si não
     basta. Formato curto de propósito: o limite real é 64 bytes e
-    "fb|1|" + hash md5 já usa 37.
+    "v|s|" + hash md5 já usa 36.
     """
     return {
         "inline_keyboard": [[
-            {"text": "👍", "callback_data": f"fb|1|{vaga_id}"},
-            {"text": "👎", "callback_data": f"fb|0|{vaga_id}"},
+            {"text": "👍", "callback_data": f"v|s|{vaga_id}"},
+            {"text": "👎", "callback_data": f"v|n|{vaga_id}"},
         ]]
     }
 
@@ -208,10 +208,10 @@ def alerta_vaga(vaga, relevancia: int, motivo: str, dias_antiga: int) -> bool:
     linhas.append("")
     linhas.append(vaga.link)
 
-    return enviar("\n".join(linhas), teclado=_teclado_feedback(vaga.id))
+    return enviar("\n".join(linhas), teclado=_botoes_de_voto(vaga.id))
 
 
-def montar_digest(vagas: list[tuple]) -> list[str]:
+def montar_resumo(vagas: list[tuple]) -> list[str]:
     """Monta o resumo diário — devolve uma LISTA de mensagens, não uma só.
 
     Um dia cheio passa dos 4.096 caracteres do Telegram com folga. Quebrar
@@ -256,14 +256,14 @@ def montar_digest(vagas: list[tuple]) -> list[str]:
     return mensagens
 
 
-def enviar_digest(vagas: list[tuple]) -> bool:
+def enviar_resumo(vagas: list[tuple]) -> bool:
     """Só devolve True se TODAS as partes confirmarem.
 
     Quem chama só esvazia a fila com True — então falha parcial mantém tudo
     pendente, inclusive a parte que já saiu. Preferir repetir uma parte a
     perder vaga que nunca chegou.
     """
-    mensagens = montar_digest(vagas)
+    mensagens = montar_resumo(vagas)
     if not mensagens:
         return True
     return all(enviar(m) for m in mensagens)
@@ -316,17 +316,17 @@ _CHAVE_OFFSET = "telegram_offset"
 
 
 def parsear_callback(data: str) -> tuple[str, str] | None:
-    """Extrai (id_da_vaga, feedback) de 'fb|1|<id>' / 'fb|0|<id>'.
+    """Extrai (id_da_vaga, feedback) de 'v|s|<id>' / 'v|n|<id>'.
 
     None quando não reconhece — inclusive pro botão de confirmação
-    'fb|ok|-', que substitui o teclado depois do clique e existe justamente
+    'v|ok|-', que substitui o teclado depois do clique e existe justamente
     pra não ser clicável de novo. Função pura, separada da rede de
     propósito: é a parte que vale testar sem simular HTTP.
     """
     partes = (data or "").split("|")
-    if len(partes) != 3 or partes[0] != "fb" or partes[1] not in ("1", "0"):
+    if len(partes) != 3 or partes[0] != "v" or partes[1] not in ("s", "n"):
         return None
-    return partes[2], ("positivo" if partes[1] == "1" else "negativo")
+    return partes[2], ("positivo" if partes[1] == "s" else "negativo")
 
 
 def processar_feedback(deposito) -> int:
@@ -398,7 +398,7 @@ def processar_feedback(deposito) -> int:
                 # e evita clique duplo mudando o valor sem querer.
                 "reply_markup": json.dumps({
                     "inline_keyboard": [[
-                        {"text": f"✅ {emoji} registrado", "callback_data": "fb|ok|-"}
+                        {"text": f"✅ {emoji} registrado", "callback_data": "v|ok|-"}
                     ]]
                 }),
             })
