@@ -45,7 +45,19 @@ jobs:
                   r = requests.get(url, headers=headers, timeout=25)
                   print("ENDPOINT", r.status_code, len(r.content), r.url)
                   if "/api/job-search/jobs" in url:
-                      print("RESPOSTA", r.text[:6000].replace("\n", " "))
+                      try:
+                          payload = r.json()
+                          print("JSON_KEYS", sorted(payload))
+                          print("PAGINATION", payload.get("pagination"))
+                          for item in (payload.get("data") or [])[:2]:
+                              print("ITEM_KEYS", sorted(item))
+                              print("ITEM", {k: item.get(k) for k in [
+                                  "id", "name", "careerPageName", "city", "state",
+                                  "country", "workplaceType", "publishedDate",
+                                  "jobUrl", "careerPageUrl"
+                              ]})
+                      except Exception:
+                          print("RESPOSTA", r.text[:1000].replace("\n", " "))
               except Exception as exc:
                   print("ENDPOINT ERRO", url, type(exc).__name__, str(exc)[:200])
 
