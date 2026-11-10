@@ -1,6 +1,12 @@
 name: Radar
 
 on:
+  # Atualizar .github/force-radar dispara uma rodada sob demanda sem alterar
+  # código nem depender do botão da interface do GitHub.
+  push:
+    branches: [main]
+    paths:
+      - ".github/force-radar"
   schedule:
     # A cada 3 horas. O ciclo leva menos de 1 minuto hoje (só fontes de API),
     # então o intervalo é sobre com que frequência você quer ser avisado, não
