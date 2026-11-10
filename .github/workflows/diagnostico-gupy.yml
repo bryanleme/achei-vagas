@@ -1,0 +1,81 @@
+name: Diagnostico Gupy
+
+on:
+  push:
+    branches: [codex/diagnostico-gupy]
+    paths:
+      - ".github/workflows/diagnostico-gupy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspecionar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Inspecionar portal e scripts
+        run: |
+          python - <<'PY'
+          import re
+          from urllib.parse import urljoin
+
+          import requests
+
+          headers = {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 Chrome/128 Safari/537.36",
+              "Accept-Language": "pt-BR,pt;q=0.9",
+          }
+
+          endpoints = [
+              "https://employability-portal.gupy.io/api/v1/jobs?jobName=analista&limit=1&offset=0",
+              "https://portal.gupy.io/vagas",
+              "https://portal.gupy.io/job-search/term=analista",
+          ]
+          for url in endpoints:
+              try:
+                  r = requests.get(url, headers=headers, timeout=25)
+                  print("ENDPOINT", r.status_code, len(r.content), r.url)
+              except Exception as exc:
+                  print("ENDPOINT ERRO", url, type(exc).__name__, str(exc)[:200])
+
+          pagina = requests.get("https://portal.gupy.io/vagas", headers=headers, timeout=25)
+          pagina.raise_for_status()
+          html = pagina.text
+          print("HTML", len(html), "next_data", "__NEXT_DATA__" in html)
+          scripts = re.findall(r'<script[^>]+src=["\x27]([^"\x27]+)', html)
+          print("SCRIPTS", len(scripts))
+
+          agulhas = [
+              "employability-portal",
+              "/api/v1/jobs",
+              "jobName",
+              "job-search",
+              "workplaceType",
+              "publishedDate",
+              "careerPageName",
+              "graphql",
+          ]
+          for src in scripts:
+              url = urljoin(pagina.url, src)
+              try:
+                  texto = requests.get(url, headers=headers, timeout=25).text
+              except Exception as exc:
+                  print("SCRIPT ERRO", url, type(exc).__name__)
+                  continue
+              encontrados = [a for a in agulhas if a.lower() in texto.lower()]
+              if not encontrados:
+                  continue
+              print("SCRIPT", url, len(texto), encontrados)
+              baixo = texto.lower()
+              for agulha in encontrados:
+                  pos = baixo.find(agulha.lower())
+                  trecho = texto[max(0, pos - 350):pos + 700]
+                  print("CONTEXTO", agulha, trecho.replace("\n", " ")[:1050])
+          PY
