@@ -37,11 +37,15 @@ jobs:
               "https://employability-portal.gupy.io/api/v1/jobs?jobName=analista&limit=1&offset=0",
               "https://portal.gupy.io/vagas",
               "https://portal.gupy.io/job-search/term=analista",
+              "https://portal.gupy.io/api/job-search/jobs?jobName=analista&limit=2&offset=0",
+              "https://employability-portal.gupy.io/api/job-search/jobs?jobName=analista&limit=2&offset=0",
           ]
           for url in endpoints:
               try:
                   r = requests.get(url, headers=headers, timeout=25)
                   print("ENDPOINT", r.status_code, len(r.content), r.url)
+                  if "/api/job-search/jobs" in url:
+                      print("RESPOSTA", r.text[:6000].replace("\n", " "))
               except Exception as exc:
                   print("ENDPOINT ERRO", url, type(exc).__name__, str(exc)[:200])
 
