@@ -7,7 +7,7 @@ vaga remota em inglês.
 
 DESCOBERTA QUE MUDA O PROJETO: existe API JSON pública por trás do portal.
 
-    https://employability-portal.gupy.io/api/v1/jobs?jobName=<termo>
+    https://portal.gupy.io/api/job-search/jobs?jobName=<termo>
 
 Encontrada inspecionando as requisições reais do portal (o HTML servido não
 traz vaga nenhuma — a página monta no navegador). Isso importa muito mais
@@ -35,7 +35,7 @@ from urllib.parse import urlparse
 
 from radar.fontes.base import Cadencia, Fonte, Resultado, get_json, montar, texto_de_local
 
-API = "https://employability-portal.gupy.io/api/v1/jobs"
+API = "https://portal.gupy.io/api/job-search/jobs"
 
 # O portal exige Origin/Referer coerentes. Sem eles a API responde, mas não
 # vale arriscar: é o comportamento que o navegador real produz.
@@ -91,7 +91,11 @@ def _converter(item: dict, termo_busca: str = ""):
         # fora o único texto de requisito que o projeto tem de graça.
         descricao=item.get("description", "") or "",
         termo_busca=termo_busca,
-        empresa_url=_pagina_de_carreira(item.get("careerPageUrl")),
+        # O endpoint novo pode devolver careerPageUrl vazio. O domínio do
+        # jobUrl é a mesma página de carreira e serve como fallback estável.
+        empresa_url=_pagina_de_carreira(
+            item.get("careerPageUrl") or item.get("jobUrl")
+        ),
     )
 
 
