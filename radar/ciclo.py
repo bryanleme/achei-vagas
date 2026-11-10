@@ -244,6 +244,14 @@ async def rodar(so_teste: bool = False) -> dict:
         )
 
     if not so_teste:
+        descartadas = deposito.descartar_pendentes_fora_do_perfil(regras)
+        if descartadas:
+            logger.info(
+                "%d vaga(s) retirada(s) do resumo por não atender mais ao "
+                "perfil atual.",
+                descartadas,
+            )
+
         processados = telegram.processar_feedback(deposito)
         if processados:
             logger.info("%d resposta(s) de 👍/👎 registrada(s).", processados)
