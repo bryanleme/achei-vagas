@@ -267,73 +267,17 @@ TERMOS_POR_RODADA = 10
 # ---------------------------------------------------------------------------
 # LOCALIZAÇÃO
 # ---------------------------------------------------------------------------
-# Cidades onde vaga presencial ou híbrida é aceita, em DUAS FAIXAS.
-#
-# A distinção não é burocracia: sem ela, uma vaga presencial no Itaim Bibi
-# ranqueia igual a uma em Sorocaba. As duas passam no filtro — você aceita as
-# duas — mas uma é a vinte minutos de casa e a outra é duas horas de estrada
-# por dia. Tratar as duas como a mesma coisa entope o resumo com vaga da
-# capital, que é o que existe em maior volume, e enterra a vaga da região,
-# que é rara e é a que interessa.
-#
-# O filtro não muda: cidade de qualquer faixa é aceita. O que muda é o peso
-# no score — ver relevancia.py.
-
-# FAIXA 1 — deslocamento diário viável a partir de Itapetininga.
+# Vagas presenciais e híbridas só interessam nestas duas cidades. A
+# modalidade híbrida continua sendo tratada como não remota, portanto precisa
+# casar uma destas cidades do mesmo jeito que a presencial.
 CIDADES_REGIAO = [
     "Itapetininga",
-    "Alambari",
-    "Angatuba",
-    "Araçoiaba da Serra",
-    "Avaré",
-    "Boituva",
-    "Botucatu",
-    "Buri",
-    "Campina do Monte Alegre",
-    "Capão Bonito",
-    "Capela do Alto",
-    "Cerquilho",
-    "Guareí",
-    "Iperó",
-    "Itapeva",
-    "Laranjal Paulista",
-    "Lençóis Paulista",
-    "Paranapanema",
-    "Piedade",
-    "Pilar do Sul",
-    "Salto de Pirapora",
-    "São Miguel Arcanjo",
-    "Sarapuí",
     "Sorocaba",
-    "Tatuí",
-    "Tietê",
-    "Votorantim",
-    "Alumínio",
-    "Itu",
-    # Já estavam no radar antes desta lista e ficam: mesmo corredor, mesma
-    # distância. Tire daqui se não quiser mais.
-    "Porto Feliz",
-    "Cesário Lange",
-    "Conchas",
-    "Itararé",
-    "Taquarituba",
-    "Cerqueira César",
-    "Itaí",
 ]
 
-# FAIXA 2 — aceitas, mas longe. Entram no radar e pontuam menos.
-#
-# São Paulo e Campinas sozinhas têm mais vaga aberta que as 34 cidades da
-# região somadas (MEDIDO no mapeamento: as duas bateram o teto de 1.200 vagas
-# da coleta, contra 556 de Sorocaba). Sem o desconto, elas dominariam todo
-# resumo pelo simples volume.
-CIDADES_DISTANTES = [
-    "São Paulo",
-    "Campinas",
-    "Cotia",
-    "São Roque",
-    "Vargem Grande Paulista",
-]
+# Mantido vazio por compatibilidade com o ranking e o ciclo. Nenhuma cidade
+# fora das duas acima deve passar pelo filtro de vaga presencial ou híbrida.
+CIDADES_DISTANTES = []
 
 CIDADES = CIDADES_REGIAO + CIDADES_DISTANTES
 

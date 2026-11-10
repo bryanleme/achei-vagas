@@ -2,8 +2,8 @@
 
 Monitor automatizado de vagas para um perfil específico: **PCP, Logística e
 Frotas, BI e Indicadores, Auditoria e Conformidade, Melhoria Contínua** —
-no corredor oeste de São Paulo (Itapetininga, Sorocaba, Botucatu, Avaré,
-Itapeva e região) mais vagas remotas no Brasil.
+com vagas **presenciais ou híbridas em Itapetininga/SP e Sorocaba/SP**, mais
+vagas **remotas em qualquer local do Brasil**.
 
 Roda sozinho no GitHub Actions a cada 3 horas. Sem servidor, sem custo.
 Avisa no Telegram.
@@ -29,8 +29,9 @@ Cargo passa por três níveis de confiança:
 
 Nada aprova por palavra-chave solta.
 
-Localização: cidade do corredor (com **guarda de UF** — `Piedade - PE` não é
-`Piedade/SP`) ou vaga remota. Remota que declara mercado estrangeiro é
+Localização: presencial ou híbrida apenas em **Itapetininga/SP** ou
+**Sorocaba/SP** (com guarda de UF), ou vaga remota no Brasil. Remota que
+declara mercado estrangeiro é
 descartada; remota sem mercado declarado passa, exceto vinda de agregador
 estrangeiro, onde a ausência significa o contrário.
 
@@ -73,8 +74,8 @@ perguntar, e a diferença entre elas importa mais que a contagem.
 | Vagas.com · InfoJobs · Catho | HTML servido |
 | Remotive · RemoteOK · Jobicy · Himalayas · Arbeitnow · Working Nomads · The Muse | API JSON |
 
-**Por cidade** — "o que existe em Itapetininga?" — roda 1× por dia, nas 35
-cidades da região:
+**Por cidade** — "o que existe em Itapetininga ou Sorocaba?" — roda 1× por
+dia nas duas cidades-alvo:
 
 | Fonte | Tipo |
 |---|---|
@@ -99,7 +100,7 @@ que chega até ele.
 
 A lista de empresas **se monta sozinha**: o ciclo registra toda empresa que
 publicou numa cidade da região, inclusive quando a vaga em si foi reprovada.
-Uma metalúrgica de Tatuí que hoje publicou "Soldador" é exatamente a empresa
+Uma empresa de Sorocaba que hoje publicou "Soldador" é exatamente a empresa
 que mês que vem publica "Analista de PCP".
 
 ### O que foi testado e ficou de fora
