@@ -112,6 +112,47 @@ def test_fila_vem_ordenada_da_mais_relevante():
     assert notas == [9, 6, 3]
 
 
+def test_fila_descarta_vaga_que_nao_atende_mais_ao_perfil():
+    _guardar(
+        vaga(
+            titulo="Analista de PCP",
+            local="Tatuí - SP",
+            modalidade="Presencial",
+            link="https://exemplo.com/tatui",
+        ),
+        digest=True,
+    )
+    _guardar(
+        vaga(
+            titulo="Analista de Logística",
+            local="Sorocaba - SP",
+            modalidade="Híbrido",
+            link="https://exemplo.com/sorocaba",
+        ),
+        digest=True,
+    )
+    _guardar(
+        vaga(
+            titulo="Analista de BI",
+            local="Recife - PE",
+            modalidade="Remoto",
+            link="https://exemplo.com/remota",
+        ),
+        digest=True,
+    )
+
+    descartadas = deposito.descartar_pendentes_fora_do_perfil(
+        ciclo.regras_do_perfil()
+    )
+
+    assert descartadas == 1
+    pendentes = deposito.pendentes_do_digest()
+    assert {linha[0] for linha in pendentes} == {
+        "Analista de Logística",
+        "Analista de BI",
+    }
+
+
 def test_fila_so_e_limpa_depois_do_envio_confirmado():
     _guardar(vaga(), relevancia=4, digest=True)
     assert len(deposito.pendentes_do_digest()) == 1

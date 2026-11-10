@@ -219,6 +219,45 @@ def pendentes_do_digest() -> list[tuple]:
         ).fetchall()
 
 
+def descartar_pendentes_fora_do_perfil(regras) -> int:
+    """Retira da fila vagas que não atendem mais ao perfil atual.
+
+    O histórico continua intacto: apenas o envio pendente é cancelado. Isso
+    importa quando cidades, cargos ou exclusões mudam entre o momento em que
+    uma vaga entrou na fila e o resumo seguinte.
+    """
+    # Import local evita um ciclo de imports no carregamento dos módulos:
+    # filtro usa Vaga, e deposito também precisa reconstruí-la aqui.
+    from radar.filtro import avaliar
+
+    with _conectar() as conn:
+        linhas = conn.execute(
+            "SELECT id, titulo, empresa, local, link, fonte, modalidade "
+            "FROM vagas WHERE digest_pendente = 1"
+        ).fetchall()
+
+        rejeitadas = []
+        for id_vaga, titulo, empresa, local, link, fonte, modalidade in linhas:
+            vaga = Vaga(
+                titulo=titulo,
+                empresa=empresa or "",
+                local=local or "",
+                link=link or "",
+                fonte=fonte or "",
+                modalidade=modalidade or "",
+            )
+            if not avaliar(vaga, regras).aprovada:
+                rejeitadas.append((id_vaga,))
+
+        if rejeitadas:
+            conn.executemany(
+                "UPDATE vagas SET digest_pendente = 0 WHERE id = ?",
+                rejeitadas,
+            )
+
+    return len(rejeitadas)
+
+
 def limpar_fila_do_digest() -> int:
     """Esvazia a fila. Chamado SÓ depois de o envio ter sido confirmado —
     falha parcial mantém tudo pendente, inclusive a parte que já saiu.
