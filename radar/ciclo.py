@@ -11,19 +11,27 @@ que isso aconteceu. Gravando depois, a falha custa no máximo uma repetição.
 
 O princípio que decide todo empate deste projeto: duplicar é aceitável,
 perder não.
+
+UMA COLETA, VÁRIOS PERFIS. As fontes são consultadas uma vez, com a união
+dos termos e da geografia de todos os perfis ativos. Cada vaga coletada é
+avaliada contra cada perfil separadamente — filtro, nota, deduplicação,
+alerta e fila são todos POR PERFIL. Ver radar/perfis.py.
 """
 
 import asyncio
+import os
 from collections import Counter
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 
-from radar import config, deposito
+from radar import config, deposito, perfis as perfis_mod
 from radar.alertas import telegram
 from radar.filtro import Regras, avaliar, barrada_so_pelo_cargo
 from radar.fontes import registro
 from radar.fontes.base import Resultado, com_protecao
 from radar.localizacao import casa_cidade
 from radar.log import logger
+from radar.perfis import Perfil
 from radar.relevancia import pontuar
 
 CHAVE_RODIZIO = "rodizio_offset"
@@ -32,27 +40,21 @@ CHAVE_BATIMENTO = "batimento_ultimo_dia"
 CHAVE_DIGEST = "digest_ultimo_dia"
 CHAVE_FONTES_DIARIAS = "fontes_diarias_ultimo_dia"
 
+# Quanto dura a estreia de um perfil novo: nada alerta na hora, tudo vai pro
+# resumo. Ver perfil_em_estreia.
+DURACAO_ESTREIA = timedelta(hours=30)
+
 
 def regras_do_perfil() -> Regras:
-    return Regras(
-        cargos_fortes=config.CARGOS_FORTES,
-        cargos_ambiguos=config.CARGOS_AMBIGUOS,
-        qualificadores_dominio=config.QUALIFICADORES_DOMINIO,
-        ferramentas_de_cargo=config.FERRAMENTAS_DE_CARGO,
-        palavras_de_cargo=config.PALAVRAS_DE_CARGO,
-        cidades=config.CIDADES,
-        uf_esperada=config.UF_BUSCA,
-        aceita_remoto=config.ACEITA_REMOTO,
-        paises_remoto_permitidos=config.PAISES_REMOTO_PERMITIDOS,
-        exclusoes_titulo=config.EXCLUSOES_TITULO,
-    )
+    """As regras do perfil principal. Mantida pra quem já chamava assim."""
+    return perfis_mod.perfil_principal().regras
 
 
 # ---------------------------------------------------------------------------
 # Rodízio de termos
 # ---------------------------------------------------------------------------
 
-def termos_desta_rodada() -> list[str]:
+def termos_desta_rodada(perfis: list[Perfil] | None = None) -> list[str]:
     """Os prioritários SEMPRE, mais um bloco do rodízio.
 
     Por que os prioritários saem do rodízio: se todos os termos disputassem
@@ -65,9 +67,12 @@ def termos_desta_rodada() -> list[str]:
 
     Prioritário custa alguns segundos por ciclo e sobe a cobertura dos
     termos que importam de 1x a cada 13h para 8x por dia.
+
+    Com vários perfis, prioritários e rodízio são a UNIÃO dos perfis: termo
+    repetido entre dois perfis é buscado uma vez só.
     """
-    prioritarios = [t for t in config.TERMOS_PRIORITARIOS if t in config.TERMOS_DE_BUSCA]
-    resto = [t for t in config.TERMOS_DE_BUSCA if t not in prioritarios]
+    perfis = perfis if perfis is not None else [perfis_mod.perfil_principal()]
+    prioritarios, resto = perfis_mod.termos_da_coleta(perfis)
 
     if not resto:
         return prioritarios
@@ -109,11 +114,59 @@ def em_varredura_inicial() -> bool:
     return int(deposito.ler(CHAVE_VOLTAS) or 0) < 1
 
 
+def perfil_em_estreia(perfil: Perfil, agora: datetime) -> bool:
+    """O perfil acabou de chegar: tudo dele vai pro resumo, nada alerta.
+
+    É a mesma lição de em_varredura_inicial, agora por pessoa. Um perfil
+    convidado que entra hoje vê pela primeira vez tudo o que já estava
+    publicado na cidade dele — e "novo pra ele" não é "novo no mundo".
+
+    30 horas e não "um ciclo": a varredura por cidade e por empresa roda só
+    no primeiro ciclo do dia (UTC), e o rodízio de termos leva ~18 horas pra
+    dar a volta. Quem é vinculado logo depois do ciclo diário só passa por
+    ele ~24 horas depois; 30 cobre isso com folga.
+
+    O começo é marcado no vínculo do convite; perfil sem marca (o principal
+    num banco novo) ganha a marca agora.
+    """
+    if em_varredura_inicial():
+        return True
+    chave = f"inicio:{perfil.id}"
+    inicio = deposito.ler(chave)
+    if inicio is None:
+        deposito.gravar(chave, agora.isoformat(timespec="seconds"))
+        return True
+    return agora < datetime.fromisoformat(inicio) + DURACAO_ESTREIA
+
+
 # ---------------------------------------------------------------------------
-# Digest e batimento
+# Destino, digest e batimento — por perfil
 # ---------------------------------------------------------------------------
 
-def deve_enviar_digest(agora: datetime | None = None) -> bool:
+def destino_do_perfil(perfil: Perfil) -> str | None:
+    """O chat do Telegram deste perfil, ou None se ainda não há.
+
+    O principal vem de variável de ambiente (o secret de sempre). Convidado
+    vem do vínculo feito pelo convite.
+
+    .strip() pelo mesmo motivo de config.TELEGRAM_BOT_TOKEN: um "\\r" colado
+    junto com o valor do secret vira chat inexistente.
+    """
+    if perfil.chat_id_env:
+        return (os.getenv(perfil.chat_id_env) or "").strip() or None
+    return deposito.destino(perfil.id)
+
+
+def dia_local(perfil: Perfil, agora: datetime) -> datetime:
+    """`agora` (UTC) no fuso do perfil.
+
+    Conta feita com offset explícito, nunca com o relógio da máquina: dá o
+    mesmo resultado no GitHub Actions (UTC) e em casa (UTC-3).
+    """
+    return agora.astimezone(timezone.utc) + timedelta(hours=perfil.fuso_utc)
+
+
+def deve_enviar_digest(perfil: Perfil, agora: datetime | None = None) -> bool:
     """"Ainda não enviei hoje E já passou da hora" — nunca "a hora é X".
 
     A diferença entre as duas formulações é a diferença entre um recurso que
@@ -129,48 +182,57 @@ def deve_enviar_digest(agora: datetime | None = None) -> bool:
     A formulação atual não precisa de rede de segurança: se o ciclo das
     09:00 falhar, o das 12:00 manda, porque "já passou de 9" continua
     verdadeiro o dia inteiro.
+
+    Hora e dia no fuso do PERFIL: cada pessoa recebe o resumo da manhã dela.
     """
     agora = agora or datetime.now(timezone.utc)
-    if deposito.ja_feito_hoje(CHAVE_DIGEST, agora.date()):
+    local = dia_local(perfil, agora)
+    if deposito.ja_feito_hoje(f"{CHAVE_DIGEST}:{perfil.id}", local.date()):
         return False
-    return agora.hour >= config.HORA_RESUMO_UTC
+    return local.hour >= perfil.hora_resumo
 
 
-def enviar_digest_se_for_hora(agora: datetime | None = None) -> int:
+def enviar_digest_se_for_hora(perfil: Perfil, chat_id: str, agora: datetime | None = None) -> int:
     agora = agora or datetime.now(timezone.utc)
-    if not deve_enviar_digest(agora):
+    if not deve_enviar_digest(perfil, agora):
         return 0
 
-    pendentes = deposito.pendentes_do_digest()
+    chave = f"{CHAVE_DIGEST}:{perfil.id}"
+    hoje: date = dia_local(perfil, agora).date()
+    pendentes = deposito.pendentes_do_digest(perfil.id)
     if not pendentes:
         # Marca mesmo sem vaga nenhuma. Sem isso a condição fica verdadeira
         # em todo ciclo seguinte do dia, e o log enche de tentativa vazia.
-        deposito.marcar_feito_hoje(CHAVE_DIGEST, agora.date())
+        deposito.marcar_feito_hoje(chave, hoje)
         return 0
 
-    if telegram.enviar_resumo(pendentes):
-        deposito.limpar_fila_do_digest()
-        deposito.marcar_feito_hoje(CHAVE_DIGEST, agora.date())
-        logger.info("Resumo diário enviado: %d vaga(s).", len(pendentes))
+    if telegram.enviar_resumo(pendentes, chat_id, perfil.max_resumo):
+        deposito.limpar_fila_do_digest(perfil.id)
+        deposito.marcar_feito_hoje(chave, hoje)
+        logger.info("[%s] Resumo diário enviado: %d vaga(s).", perfil.id, len(pendentes))
         return len(pendentes)
 
     # Não marca nem limpa: tenta de novo no próximo ciclo. Repetir uma
     # mensagem é barato; perder a fila inteira não é.
     logger.warning(
-        "Falha ao enviar o resumo (%d vaga(s) pendentes) — tenta no próximo ciclo.",
-        len(pendentes),
+        "[%s] Falha ao enviar o resumo (%d vaga(s) pendentes) — tenta no próximo ciclo.",
+        perfil.id, len(pendentes),
     )
     return 0
 
 
 def enviar_batimento_se_for_o_primeiro(
-    novas: int, com_problema: list[str], total_fontes: int, agora: datetime | None = None
+    perfil: Perfil, chat_id: str, novas: int, com_problema: list[str],
+    total_fontes: int, agora: datetime | None = None, perfis_ativos: int = 1,
 ) -> bool:
     agora = agora or datetime.now(timezone.utc)
-    if deposito.ja_feito_hoje(CHAVE_BATIMENTO, agora.date()):
+    local = dia_local(perfil, agora)
+    chave = f"{CHAVE_BATIMENTO}:{perfil.id}"
+    if deposito.ja_feito_hoje(chave, local.date()):
         return False
-    if telegram.batimento(novas, com_problema, total_fontes, agora.strftime("%H:%M UTC")):
-        deposito.marcar_feito_hoje(CHAVE_BATIMENTO, agora.date())
+    hora = f"{local:%H:%M} (UTC{perfil.fuso_utc:+d})"
+    if telegram.batimento(chat_id, novas, com_problema, total_fontes, hora, perfis_ativos):
+        deposito.marcar_feito_hoje(chave, local.date())
         return True
     return False
 
@@ -180,7 +242,6 @@ def _primeiro_ciclo_do_dia(agora: datetime) -> bool:
     if not ja:
         deposito.marcar_feito_hoje(CHAVE_FONTES_DIARIAS, agora.date())
     return not ja
-
 
 
 async def _buscar_termos(fonte, termos: list[str]) -> list[Resultado]:
@@ -209,70 +270,250 @@ async def _buscar_termos(fonte, termos: list[str]) -> list[Resultado]:
 
 
 # ---------------------------------------------------------------------------
+# Uma vaga, um perfil
+# ---------------------------------------------------------------------------
+
+@dataclass
+class EstadoDoPerfil:
+    """O que o ciclo acumula pra um perfil enquanto percorre as fontes."""
+
+    perfil: Perfil
+    chat_id: str | None
+    estreia: bool
+    aprovadas: int = 0
+    novas: int = 0
+    alertas: int = 0
+    excluidas: int = 0
+    barradas_pelo_titulo: int = 0
+    sem_mercado_declarado: int = 0
+    rejeitadas_por_mercado: Counter = field(default_factory=Counter)
+    # Dedup dentro do próprio ciclo, por perfil.
+    ja_notificadas: set[str] = field(default_factory=set)
+
+
+def processar_vaga(vaga, fonte, est: EstadoDoPerfil, so_teste: bool) -> bool:
+    """Filtra, pontua, deduplica, avisa e grava UMA vaga pra UM perfil.
+
+    Devolve True se a vaga foi nova pra este perfil.
+    """
+    perfil = est.perfil
+    regras = perfil.regras
+    resultado = avaliar(vaga, regras)
+
+    if resultado.escopo_rejeitado:
+        est.rejeitadas_por_mercado.update(resultado.escopo_rejeitado)
+
+    if resultado.excluida:
+        est.excluidas += 1
+        return False
+
+    if not resultado.aprovada:
+        if barrada_so_pelo_cargo(vaga, regras):
+            est.barradas_pelo_titulo += 1
+        return False
+
+    # Agregador estrangeiro precisa DECLARAR o mercado. Ver
+    # `exige_mercado_declarado` em fontes/base.py: num portal brasileiro,
+    # remoto sem escopo quer dizer Brasil; num agregador de vaga em inglês,
+    # quer dizer o contrário.
+    if fonte.exige_mercado_declarado and resultado.remota and not resultado.mercado_declarado:
+        est.sem_mercado_declarado += 1
+        return False
+
+    est.aprovadas += 1
+
+    # Dedup dentro do próprio ciclo, antes de consultar o banco: a mesma vaga
+    # costuma vir por dois termos diferentes da mesma fonte, e sem isso ela
+    # seria notificada duas vezes na mesma execução (o banco só a conheceria
+    # depois da primeira gravação).
+    #
+    # As DUAS chaves, não só o link. MEDIDO na primeira execução real:
+    # "Analista de PCP (Planejamento e Controle de Produção)" da mesma
+    # empresa apareceu duas vezes no mesmo ciclo, com links diferentes — a
+    # empresa publicou a vaga duas vezes. O link sozinho não pega isso;
+    # empresa+título pega.
+    chave = vaga.chave_secundaria
+    if vaga.id in est.ja_notificadas or (chave and chave in est.ja_notificadas):
+        return False
+    est.ja_notificadas.add(vaga.id)
+    if chave:
+        est.ja_notificadas.add(chave)
+
+    if deposito.vaga_conhecida(vaga, perfil.id):
+        return False
+
+    nota = pontuar(
+        vaga, regras, resultado,
+        niveis_alvo=set(perfil.niveis_alvo),
+        niveis_acima=set(perfil.niveis_acima),
+        dias_vaga_antiga=perfil.dias_vaga_antiga,
+        cidades_distantes=set(perfil.cidades_distantes),
+    )
+    antiga = vaga.antiga(perfil.dias_vaga_antiga)
+    # Cidade distante NUNCA alerta na hora — vai pro resumo, independente da
+    # nota.
+    #
+    # Isto é política, não ajuste de peso. Dava pra chegar no mesmo efeito
+    # baixando PESO_CIDADE_DISTANTE até a conta não alcançar o limiar, e
+    # seria frágil: qualquer mexida futura em outro peso reabriria o caminho
+    # sem ninguém perceber. A regra que se quer é "vaga a duas horas de casa
+    # não interrompe seu dia" — então ela está escrita assim, e continua
+    # valendo mesmo que a escala mude.
+    longe = resultado.cidade in perfil.cidades_distantes
+    estreia = est.estreia
+    imediata = (
+        perfil.alerta_imediato
+        and nota.total >= perfil.limiar_imediato
+        and not antiga
+        and not estreia
+        and not longe
+    )
+
+    if so_teste:
+        logger.info(
+            "  [teste:%s] %s (%d/10) %s — %s | %s",
+            perfil.id, "AGORA " if imediata else "resumo",
+            nota.total, vaga.titulo, vaga.empresa, vaga.local,
+        )
+        est.novas += 1
+        return True
+
+    if imediata:
+        enviou = telegram.alerta_vaga(
+            vaga, est.chat_id, nota.total, str(nota), perfil.dias_vaga_antiga
+        )
+        if not enviou:
+            # NÃO grava. A vaga volta no próximo ciclo — ver o cabeçalho
+            # deste arquivo.
+            logger.warning(
+                "[%s] Falha ao alertar '%s' — não gravada, volta no próximo ciclo.",
+                perfil.id, vaga.titulo,
+            )
+            return False
+        est.alertas += 1
+        logger.info("[%s] Alerta enviado (%d/10): %s", perfil.id, nota.total, vaga.titulo)
+
+    deposito.salvar(vaga, perfil.id, nota.total, str(nota), digest_pendente=not imediata)
+    est.novas += 1
+    return True
+
+
+def _cidade_de_algum_perfil(vaga, perfis: list[Perfil]) -> str | None:
+    for p in perfis:
+        cidade = casa_cidade(vaga.local, p.regras.cidades, p.uf)
+        if cidade:
+            return cidade
+    return None
+
+
+def _diagnostico(est: EstadoDoPerfil) -> None:
+    """Diagnóstico que só existe se for medido. Escopo mal reconhecido barra
+    a vaga do jeito certo e some sem rastro — um falso negativo em massa
+    passaria despercebido sem estas linhas."""
+    pid = est.perfil.id
+    logger.info(
+        "[%s] %d aprovadas → %d novas (%d alerta(s) na hora)%s",
+        pid, est.aprovadas, est.novas, est.alertas, " — em estreia" if est.estreia else "",
+    )
+    if est.rejeitadas_por_mercado:
+        detalhe = "; ".join(f"{m} ({n})" for m, n in est.rejeitadas_por_mercado.most_common())
+        logger.info("[%s] Descartadas por mercado: %s", pid, detalhe)
+    if est.excluidas:
+        logger.info("[%s] %d vaga(s) descartadas por exclusão no título.", pid, est.excluidas)
+    if est.sem_mercado_declarado:
+        logger.info(
+            "[%s] %d vaga(s) de agregador estrangeiro descartadas por não declarar "
+            "mercado — ver exige_mercado_declarado em fontes/base.py.",
+            pid, est.sem_mercado_declarado,
+        )
+    if est.barradas_pelo_titulo:
+        logger.info(
+            "[%s] %d vaga(s) em local aceito foram barradas só pelo título "
+            "(preço da decisão de ler só o título — se este número crescer "
+            "com vaga boa, vale reconsiderar).",
+            pid, est.barradas_pelo_titulo,
+        )
+
+
+# ---------------------------------------------------------------------------
 # O ciclo
 # ---------------------------------------------------------------------------
 
-async def rodar(so_teste: bool = False) -> dict:
-    """Roda um ciclo completo. `so_teste` não envia nada nem grava."""
-    agora = datetime.now(timezone.utc)
-    regras = regras_do_perfil()
-    cidades_distantes = set(config.CIDADES_DISTANTES)
+async def rodar(so_teste: bool = False, perfis: list[Perfil] | None = None) -> dict:
+    """Roda um ciclo completo.
 
+    `so_teste` não envia nada e não consome o que chegou do Telegram. Quem
+    chama (main.py --teste) também aponta o banco pra uma cópia descartável,
+    o que garante que nada é gravado no banco real — sem depender de cada
+    função lembrar de não gravar.
+    """
+    agora = datetime.now(timezone.utc)
     deposito.iniciar()
     telegram.zerar_placar()
 
-    # PRIMEIRA EXECUÇÃO: nada alerta na hora, tudo vai pro resumo.
-    #
-    # Com o banco vazio, TODA vaga que existe hoje nos portais é "nova" — o
-    # ciclo de estreia encontra dezenas de uma vez. Sem esta guarda, todas as
-    # que passam do limiar viram alerta imediato e chegam juntas: vinte e
-    # tantas mensagens seguidas, num dia em que nenhuma delas é urgente (elas
-    # já estavam lá antes de o robô existir).
-    #
-    # O custo de errar aqui não é só incômodo. Alerta imediato que chega em
-    # rajada ensina a ignorar alerta imediato, e aí ele para de funcionar
-    # justamente quando passar a significar alguma coisa.
-    #
-    # Um resumo único, ranqueado, entrega a mesma informação melhor. Do
-    # segundo ciclo em diante o comportamento normal volta sozinho.
-    estreia = em_varredura_inicial()
-    if estreia:
-        logger.info(
-            "Varredura inicial em andamento: nada alerta na hora, tudo entra "
-            "no resumo. Alerta imediato liga quando o rodízio cobrir todos os "
-            "termos uma vez."
-        )
+    todos = [p for p in (perfis if perfis is not None else perfis_mod.todos()) if p.ativo]
+
+    chats: dict[str, Perfil] = {}
+    for p in todos:
+        chat = destino_do_perfil(p)
+        if chat:
+            chats[chat] = p
 
     if not so_teste:
-        descartadas = deposito.descartar_pendentes_fora_do_perfil(regras)
-        if descartadas:
+        recebido = telegram.processar_atualizacoes(deposito, todos, chats)
+        if recebido["votos"] or recebido["comandos"]:
             logger.info(
-                "%d vaga(s) retirada(s) do resumo por não atender mais ao "
-                "perfil atual.",
-                descartadas,
+                "Telegram: %d voto(s) 👍/👎 e %d comando(s) processados.",
+                recebido["votos"], recebido["comandos"],
             )
 
-        processados = telegram.processar_feedback(deposito)
-        if processados:
-            logger.info("%d resposta(s) de 👍/👎 registrada(s).", processados)
+    estados: list[EstadoDoPerfil] = []
+    for p in todos:
+        chat = destino_do_perfil(p)
+        if not chat and not so_teste:
+            logger.info("[%s] sem chat vinculado ainda — fora deste ciclo.", p.id)
+            continue
+        if deposito.ler(f"pausado:{p.id}") == "1":
+            logger.info("[%s] pausado pela própria pessoa — fora deste ciclo.", p.id)
+            continue
+        estados.append(EstadoDoPerfil(perfil=p, chat_id=chat, estreia=perfil_em_estreia(p, agora)))
 
-    termos = termos_desta_rodada()
-    todas = registro.fontes_ativas()
+    if not estados:
+        logger.warning(
+            "Nenhum perfil com destino. Confira TELEGRAM_CHAT_ID (perfil principal) "
+            "ou os convites dos perfis em perfis/."
+        )
+        return {"brutas": 0, "aprovadas": 0, "novas": 0, "fontes_com_problema": [],
+                "entregas": telegram.placar_de_entrega(), "por_perfil": {}}
+
+    ativos = [e.perfil for e in estados]
+
+    if not so_teste:
+        for est in estados:
+            descartadas = deposito.descartar_pendentes_fora_do_perfil(est.perfil.id, est.perfil.regras)
+            if descartadas:
+                logger.info(
+                    "[%s] %d vaga(s) retirada(s) do resumo por não atender mais ao perfil.",
+                    est.perfil.id, descartadas,
+                )
+
+    for est in estados:
+        if est.estreia:
+            logger.info(
+                "[%s] Em estreia: nada alerta na hora, tudo entra no resumo.", est.perfil.id
+            )
+
+    termos = termos_desta_rodada(ativos)
+    todas = registro.fontes_ativas(ativos)
     fontes = registro.do_ciclo(todas, _primeiro_ciclo_do_dia(agora))
 
     logger.info(
-        "Ciclo iniciado: %d termo(s) × %d fonte(s).", len(termos), len(fontes)
+        "Ciclo iniciado: %d termo(s) × %d fonte(s) × %d perfil(is).",
+        len(termos), len(fontes), len(estados),
     )
 
     brutas = 0
-    aprovadas = 0
-    novas = 0
     com_problema: list[str] = []
-    rejeitadas_por_mercado: Counter = Counter()
-    barradas_pelo_titulo = 0
-    sem_mercado_declarado = 0
-    excluidas = 0
-    ja_notificadas: set[str] = set()
 
     for fonte in fontes:
         # Termos em paralelo — o gargalo é rede, não CPU, e esperar uma
@@ -290,172 +531,57 @@ async def rodar(so_teste: bool = False) -> dict:
 
         # Fonte que falhou em TODOS os termos está com problema. Falhar em
         # um termo e responder nos outros é ruído de rede, não bloqueio.
-        if falhas == len(termos) and termos:
+        if falhas == len(resultados) and resultados:
             com_problema.append(fonte.nome)
 
-        aprovadas_da_fonte = 0
-        ineditas_da_fonte = 0
-
+        novas_da_fonte = 0
         for vaga in vagas_da_fonte:
             # Descoberta de empresa acontece ANTES do filtro e independe
-            # dele: registra toda empresa que publicou numa cidade do
-            # corredor, mesmo que ESTA vaga não sirva. Uma metalúrgica de
-            # Tatuí que hoje publicou "Soldador" é exatamente a empresa que
-            # mês que vem publica "Analista de PCP" — filtrar a descoberta
-            # por cargo descartaria as empresas certas pela vaga errada.
-            cidade_da_vaga = casa_cidade(vaga.local, config.CIDADES, config.UF_BUSCA)
+            # dele: registra toda empresa que publicou numa cidade de algum
+            # perfil, mesmo que ESTA vaga não sirva. Uma metalúrgica de Tatuí
+            # que hoje publicou "Soldador" é exatamente a empresa que mês que
+            # vem publica "Analista de PCP" — filtrar a descoberta por cargo
+            # descartaria as empresas certas pela vaga errada.
+            cidade_da_vaga = _cidade_de_algum_perfil(vaga, ativos)
             if cidade_da_vaga and vaga.empresa:
                 deposito.registrar_empresa(
                     vaga.empresa, vaga.fonte, cidade_da_vaga, vaga.empresa_url
                 )
 
-            resultado = avaliar(vaga, regras)
-
-            if resultado.escopo_rejeitado:
-                rejeitadas_por_mercado.update(resultado.escopo_rejeitado)
-
-            if resultado.excluida:
-                excluidas += 1
-                continue
-
-            if not resultado.aprovada:
-                if barrada_so_pelo_cargo(vaga, regras):
-                    barradas_pelo_titulo += 1
-                continue
-
-            # Agregador estrangeiro precisa DECLARAR o mercado. Ver
-            # `exige_mercado_declarado` em fontes/base.py: num portal
-            # brasileiro, remoto sem escopo quer dizer Brasil; num
-            # agregador de vaga em inglês, quer dizer o contrário.
-            if (
-                fonte.exige_mercado_declarado
-                and resultado.remota
-                and not resultado.mercado_declarado
-            ):
-                sem_mercado_declarado += 1
-                continue
-
-            aprovadas_da_fonte += 1
-            aprovadas += 1
-
-            # Dedup dentro do próprio ciclo, antes de consultar o banco: a
-            # mesma vaga costuma vir por dois termos diferentes da mesma
-            # fonte, e sem isso ela seria notificada duas vezes na mesma
-            # execução (o banco só a conheceria depois da primeira gravação).
-            #
-            # As DUAS chaves, não só o link. MEDIDO na primeira execução
-            # real: "Analista de PCP (Planejamento e Controle de Produção)"
-            # da mesma empresa apareceu duas vezes no mesmo ciclo, com links
-            # diferentes — a empresa publicou a vaga duas vezes. O link
-            # sozinho não pega isso; empresa+título pega.
-            chave = vaga.chave_secundaria
-            if vaga.id in ja_notificadas or (chave and chave in ja_notificadas):
-                continue
-            ja_notificadas.add(vaga.id)
-            if chave:
-                ja_notificadas.add(chave)
-
-            if deposito.vaga_conhecida(vaga):
-                continue
-
-            nota = pontuar(
-                vaga, regras, resultado,
-                niveis_alvo=config.NIVEIS_ALVO,
-                niveis_acima=config.NIVEIS_ACIMA_DO_ALVO,
-                dias_vaga_antiga=config.DIAS_PARA_VAGA_ANTIGA,
-                cidades_distantes=cidades_distantes,
-            )
-            antiga = vaga.antiga(config.DIAS_PARA_VAGA_ANTIGA)
-            # Cidade distante NUNCA alerta na hora — vai pro resumo,
-            # independente da nota.
-            #
-            # Isto é política, não ajuste de peso. Dava pra chegar no mesmo
-            # efeito baixando PESO_CIDADE_DISTANTE até a conta não alcançar o
-            # limiar, e seria frágil: qualquer mexida futura em outro peso
-            # reabriria o caminho sem ninguém perceber. A regra que se quer é
-            # "vaga a duas horas de casa não interrompe seu dia" — então ela
-            # está escrita assim, e continua valendo mesmo que a escala mude.
-            longe = resultado.cidade in cidades_distantes
-            imediata = (
-                nota.total >= config.LIMIAR_ALERTA_IMEDIATO
-                and not antiga
-                and not estreia
-                and not longe
-            )
-
-            if so_teste:
-                logger.info(
-                    "  [teste] %s (%d/10) %s — %s | %s",
-                    "AGORA " if imediata else "resumo",
-                    nota.total, vaga.titulo, vaga.empresa, vaga.local,
-                )
-                novas += 1
-                ineditas_da_fonte += 1
-                continue
-
-            if imediata:
-                enviou = telegram.alerta_vaga(
-                    vaga, nota.total, str(nota), config.DIAS_PARA_VAGA_ANTIGA
-                )
-                if not enviou:
-                    # NÃO grava. A vaga volta no próximo ciclo — ver o
-                    # cabeçalho deste arquivo.
-                    logger.warning(
-                        "Falha ao alertar '%s' — não gravada, volta no próximo ciclo.",
-                        vaga.titulo,
-                    )
-                    continue
-                logger.info("Alerta enviado (%d/10): %s", nota.total, vaga.titulo)
-
-            deposito.salvar(
-                vaga, nota.total, str(nota), digest_pendente=not imediata
-            )
-            novas += 1
-            ineditas_da_fonte += 1
+            for est in estados:
+                if processar_vaga(vaga, fonte, est, so_teste):
+                    novas_da_fonte += 1
 
         logger.info(
-            "[%s] %d brutas → %d aprovadas → %d novas%s",
-            fonte.nome, len(vagas_da_fonte), aprovadas_da_fonte, ineditas_da_fonte,
+            "[%s] %d brutas → %d nova(s) somando os perfis%s",
+            fonte.nome, len(vagas_da_fonte), novas_da_fonte,
             f" ({falhas} termo(s) com falha)" if falhas else "",
         )
 
+    for est in estados:
+        _diagnostico(est)
+
+    aprovadas = sum(e.aprovadas for e in estados)
+    novas = sum(e.novas for e in estados)
     logger.info(
-        "Ciclo concluído: %d brutas → %d aprovadas → %d novas.", brutas, aprovadas, novas
+        "Ciclo concluído: %d brutas → %d aprovadas → %d novas (somando %d perfil(is)).",
+        brutas, aprovadas, novas, len(estados),
     )
 
-    # Diagnóstico que só existe se for medido. Escopo mal reconhecido barra
-    # a vaga do jeito certo e some sem rastro — um falso negativo em massa
-    # passaria despercebido sem esta linha.
-    if rejeitadas_por_mercado:
-        detalhe = "; ".join(f"{m} ({n})" for m, n in rejeitadas_por_mercado.most_common())
-        logger.info("Descartadas por mercado: %s", detalhe)
-    if excluidas:
-        logger.info(
-            "%d vaga(s) descartadas por exclusão no título (ver "
-            "config.EXCLUSOES_TITULO).",
-            excluidas,
-        )
-    if sem_mercado_declarado:
-        logger.info(
-            "%d vaga(s) de agregador estrangeiro descartadas por não declarar "
-            "mercado — ver exige_mercado_declarado em fontes/base.py.",
-            sem_mercado_declarado,
-        )
-    if barradas_pelo_titulo:
-        logger.info(
-            "%d vaga(s) em local aceito foram barradas só pelo título "
-            "(preço da decisão de ler só o título — se este número crescer "
-            "com vaga boa, vale reconsiderar).",
-            barradas_pelo_titulo,
-        )
-
     if not so_teste:
+        admins = [e for e in estados if e.perfil.admin and e.chat_id]
         if telegram.deve_alertar_saude(len(com_problema), len(fontes)):
-            telegram.alerta_saude(com_problema, len(fontes))
-        enviar_batimento_se_for_o_primeiro(novas, com_problema, len(fontes), agora)
-        enviar_digest_se_for_hora(agora)
+            for est in admins:
+                telegram.alerta_saude(est.chat_id, com_problema, len(fontes))
+        for est in admins:
+            enviar_batimento_se_for_o_primeiro(
+                est.perfil, est.chat_id, novas, com_problema, len(fontes), agora,
+                perfis_ativos=len(estados),
+            )
+        for est in estados:
+            enviar_digest_se_for_hora(est.perfil, est.chat_id, agora)
         total = deposito.registrar_total()
-        logger.info("Banco: %d vaga(s) no histórico.", total)
+        logger.info("Banco: %d vaga(s) no catálogo.", total)
 
     placar = telegram.placar_de_entrega()
     if placar["tentativas"] and placar["falhas"] == placar["tentativas"]:
@@ -463,7 +589,7 @@ async def rodar(so_teste: bool = False) -> dict:
         # configuração quebrada (token errado, chat_id errado, bot
         # bloqueado). O ciclo inteiro rodou e nada chegou em ninguém.
         logger.error(
-            "NENHUMA das %d mensagens foi entregue. O ciclo rodou e você não "
+            "NENHUMA das %d mensagens foi entregue. O ciclo rodou e ninguém "
             "recebeu nada — confira TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID.",
             placar["tentativas"],
         )
@@ -480,4 +606,5 @@ async def rodar(so_teste: bool = False) -> dict:
         "novas": novas,
         "fontes_com_problema": com_problema,
         "entregas": placar,
+        "por_perfil": {e.perfil.id: e.novas for e in estados},
     }

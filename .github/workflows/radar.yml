@@ -66,6 +66,30 @@ jobs:
           fi
           echo "Banco encontrado: $(du -h data/vagas.db | cut -f1)"
 
+      - name: Conferir que perfil convidado não roda em repositório público
+        # Perfil convidado põe dados de outra pessoa no repositório: cargo e
+        # cidade no TOML, e o chat do Telegram no banco que este workflow
+        # commita. Num repositório público isso é publicar dado de terceiro.
+        #
+        # Consulta a API em vez de `github.event.repository.private` porque
+        # o evento `schedule` não traz o repositório no payload — a
+        # expressão viria vazia e bloquearia (ou liberaria) pelo motivo
+        # errado.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! ls perfis/*.toml >/dev/null 2>&1; then
+            echo "Só o perfil principal — nada a conferir."
+            exit 0
+          fi
+          privado=$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)
+          if [ "$privado" != "true" ]; then
+            echo "::error::Há perfis convidados em perfis/ e o repositório é público."
+            echo "Torne o repositório privado antes de rodar com convidados."
+            exit 1
+          fi
+          echo "Repositório privado — ok."
+
       - name: Rodar o ciclo
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
