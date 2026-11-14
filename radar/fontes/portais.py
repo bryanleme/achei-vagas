@@ -192,8 +192,13 @@ class Catho(Fonte):
     BASE = "https://www.catho.com.br/vagas"
 
     def __init__(self, uf: str = "sp", estado: str = "sao-paulo"):
-        self.uf = uf
+        self.uf = uf.lower()
         self.estado = estado
+        # Uma instância por UF quando há perfis em estados diferentes. O
+        # nome distingue as instâncias no log e no alerta de saúde; SP
+        # mantém "Catho" pra não mudar o histórico.
+        if self.uf != "sp":
+            self.nome = f"Catho ({self.uf.upper()})"
 
     async def buscar(self, termo: str, navegador=None) -> Resultado:
         url = f"{self.BASE}/{_slug(termo)}/{self.uf}-{self.estado}/"
@@ -223,7 +228,9 @@ class Catho(Fonte):
                 empresa=no_empresa.get_text(strip=True) if no_empresa else "",
                 local=local_texto,
                 link=link,
-                fonte=self.nome,
+                # "Catho" fixo, não self.nome: o rótulo da vaga é o portal,
+                # igual em qualquer UF — é por ele que --precisao agrupa.
+                fonte="Catho",
                 termo_busca=termo,
             )
             if vaga:

@@ -12,8 +12,11 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from radar import ciclo, config, deposito
+from radar import ciclo, config, deposito, perfis
 from radar.alertas import telegram
+
+PRINCIPAL = perfis.perfil_principal()
+CHAVE_DIGEST = f"{ciclo.CHAVE_DIGEST}:{PRINCIPAL.id}"
 
 
 @pytest.fixture(autouse=True)
@@ -40,27 +43,31 @@ def test_g1_resumo_sai_quando_o_ciclo_termina_depois_da_hora():
     janela nunca estava aberta.
     """
     assert config.HORA_RESUMO_UTC == 9
-    assert ciclo.deve_enviar_digest(_em(10)) is True  # ciclo das 9h terminando
-    assert ciclo.deve_enviar_digest(_em(13)) is True  # ciclo das 12h, recuperação
-    assert ciclo.deve_enviar_digest(_em(23)) is True  # tarde, mas ainda hoje
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(10)) is True  # ciclo das 9h terminando
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(13)) is True  # ciclo das 12h, recuperação
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(23)) is True  # tarde, mas ainda hoje
 
 
 def test_g1_resumo_nao_sai_antes_da_hora():
-    assert ciclo.deve_enviar_digest(_em(2)) is False
-    assert ciclo.deve_enviar_digest(_em(8)) is False
+    """9h UTC = 6h em Brasília. 08:30 UTC é 05:30 no fuso do perfil."""
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(8)) is False
+    # 02:30 UTC do dia 26 ainda é 23:30 do dia 25 em Brasília: vale o
+    # resumo do dia 25, que já saiu.
+    deposito.marcar_feito_hoje(CHAVE_DIGEST, date(2026, 8, 25))
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(2)) is False
 
 
 def test_g1_resumo_sai_uma_vez_por_dia():
-    assert ciclo.deve_enviar_digest(_em(10)) is True
-    deposito.marcar_feito_hoje(ciclo.CHAVE_DIGEST, _em(10).date())
-    assert ciclo.deve_enviar_digest(_em(13)) is False
-    assert ciclo.deve_enviar_digest(_em(21)) is False
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(10)) is True
+    deposito.marcar_feito_hoje(CHAVE_DIGEST, _em(10).date())
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(13)) is False
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(21)) is False
 
 
 def test_g1_no_dia_seguinte_volta_a_sair():
-    deposito.marcar_feito_hoje(ciclo.CHAVE_DIGEST, date(2026, 8, 26))
-    assert ciclo.deve_enviar_digest(_em(10, dia=26)) is False
-    assert ciclo.deve_enviar_digest(_em(10, dia=27)) is True
+    deposito.marcar_feito_hoje(CHAVE_DIGEST, date(2026, 8, 26))
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(10, dia=26)) is False
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(10, dia=27)) is True
 
 
 def test_g1_sem_rede_de_seguranca_circular():
@@ -72,17 +79,23 @@ def test_g1_sem_rede_de_seguranca_circular():
     A formulação atual não tem estado anterior nenhum como pré-requisito:
     banco recém-criado, sem nenhum envio na história, já manda.
     """
-    assert deposito.ler(ciclo.CHAVE_DIGEST) is None
-    assert ciclo.deve_enviar_digest(_em(10)) is True
+    assert deposito.ler(CHAVE_DIGEST) is None
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(10)) is True
 
 
-def test_g1_dia_comparado_em_utc_nao_em_hora_local():
+def test_g1_dia_e_contado_no_fuso_do_perfil_nunca_no_da_maquina():
     """Misturar dia local com hora UTC dava resultado diferente no Actions
     (UTC) e na máquina de casa (UTC-3): entre 21h e meia-noite o dia local
-    ainda é o anterior ao dia UTC."""
-    deposito.marcar_feito_hoje(ciclo.CHAVE_DIGEST, date(2026, 8, 26))
-    assert deposito.ja_feito_hoje(ciclo.CHAVE_DIGEST, date(2026, 8, 26)) is True
-    assert deposito.ja_feito_hoje(ciclo.CHAVE_DIGEST, date(2026, 8, 27)) is False
+    ainda é o anterior ao dia UTC.
+
+    A conta agora é feita com o offset DO PERFIL, explícito, sobre um
+    instante UTC — o mesmo resultado em qualquer máquina."""
+    deposito.marcar_feito_hoje(CHAVE_DIGEST, date(2026, 8, 26))
+    # 01:30 UTC do dia 27 = 22:30 do dia 26 em Brasília: já saiu hoje.
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(1, dia=27)) is False
+    assert ciclo.dia_local(PRINCIPAL, _em(1, dia=27)).date() == date(2026, 8, 26)
+    # 09:30 UTC do dia 27 = 06:30 do dia 27: dia novo, passou da hora.
+    assert ciclo.deve_enviar_digest(PRINCIPAL, _em(9, dia=27)) is True
 
 
 # ===========================================================================
@@ -207,7 +220,7 @@ def test_estreia_manda_tudo_pro_resumo(monkeypatch):
     """
     import inspect
 
-    fonte = inspect.getsource(ciclo.rodar)
+    fonte = inspect.getsource(ciclo.processar_vaga)
     assert "estreia" in fonte
     assert "and not estreia" in fonte
     assert deposito.estatisticas()["total"] == 0
@@ -218,7 +231,7 @@ def test_depois_da_estreia_o_alerta_imediato_volta():
     comportamento normal voltar."""
     from tests.conftest import vaga
 
-    deposito.salvar(vaga(), 8, "cargo direto", digest_pendente=False)
+    deposito.salvar(vaga(), PRINCIPAL.id, 8, "cargo direto", digest_pendente=False)
     assert deposito.estatisticas()["total"] == 1
 
 
@@ -275,10 +288,9 @@ def test_placar_de_entrega_conta_tentativa_e_falha(monkeypatch):
 
     monkeypatch.setattr(telegram, "_chamar", lambda *a, **k: None)  # tudo falha
     monkeypatch.setattr(telegram, "configurado", lambda: True)
-    monkeypatch.setattr(telegram, "TELEGRAM_CHAT_ID", "123")
 
-    assert telegram.enviar("oi") is False
-    assert telegram.enviar("oi de novo") is False
+    assert telegram.enviar("oi", "123") is False
+    assert telegram.enviar("oi de novo", "123") is False
     assert telegram.placar_de_entrega() == {"tentativas": 2, "falhas": 2}
 
 

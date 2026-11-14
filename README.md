@@ -8,6 +8,11 @@ vagas **remotas em qualquer local do Brasil**.
 Roda sozinho no GitHub Actions a cada 3 horas. Sem servidor, sem custo.
 Avisa no Telegram.
 
+Atende também **amigos e família**: cada convidado tem o próprio perfil
+(cargos, cidade, modalidade, horário), recebe as vagas na própria conversa
+com o mesmo bot e tem o próprio 👍/👎. A coleta é uma só para todos. Ver
+[Vários perfis](#vários-perfis).
+
 ```
 buscar → filtrar → pontuar → deduplicar → avisar → gravar
 ```
@@ -49,9 +54,13 @@ Vaga presencial na região vale **mais** que remota, não menos: remota aparece
 | Alerta | Quando | Responde |
 |---|---|---|
 | 🚨 Imediato | relevância ≥ 7 | "apareceu algo que vale interromper seu dia" |
-| 📋 Resumo | 07h20 de Brasília | "isto foi o resto de ontem, ranqueado" |
+| 📋 Resumo | 1º ciclo depois das 06h de Brasília | "isto foi o resto de ontem, ranqueado" |
 | ⚠️ Saúde | maioria estrita das fontes falhou | "o silêncio é falso" |
 | 💓 Batimento | 1× por dia | "eu rodei hoje" |
+
+Saúde e batimento vão só para quem opera o radar. Convidado recebe vaga.
+O horário do resumo depende de quando o cron do GitHub de fato roda: medido,
+são 3 a 4 execuções por dia, não as 8 agendadas.
 
 O batimento é o menos óbvio e o mais importante: sem ele, *"o robô parou"* e
 *"não apareceu vaga"* chegam até você exatamente iguais — como silêncio.
@@ -140,7 +149,28 @@ python main.py            # ciclo completo (é o que o cron faz)
 python main.py --teste    # sem enviar nada, sem gravar nada
 python main.py --estado   # o que o banco tem
 python main.py --precisao # rendimento por fonte
+python main.py --perfis   # valida perfis/*.toml e mostra quem está ligado
 ```
+
+## Vários perfis
+
+O perfil principal continua em `radar/config.py`. Cada convidado é um
+arquivo `perfis/<id>.toml`, que começa a receber vagas quando a pessoa abre
+o link de convite no Telegram. Passo a passo em
+[perfis/README.md](perfis/README.md).
+
+- **Uma coleta**: cada fonte é consultada uma vez com a união dos termos e
+  dos estados de todos os perfis. A Gupy ganha uma passada por estado e a
+  Catho uma instância por UF, além das varreduras por cidade dos convidados.
+- **Avaliação por perfil**: filtro, nota, "já recebi esta", fila do resumo e
+  👍/👎 são de cada um (tabela `resultados`). A mesma vaga pode chegar a duas
+  pessoas.
+- **Nada herdado**: as exclusões e os cargos do perfil principal não valem
+  para convidados.
+- **Estreia**: nas primeiras ~30 horas de um perfil, nada alerta na hora.
+- **Privacidade**: os perfis e o banco (com o chat de cada pessoa) são
+  versionados. Com convidado, o repositório **precisa ser privado**, e o
+  workflow se recusa a rodar se não for.
 
 ## Testes
 
@@ -148,7 +178,7 @@ python main.py --precisao # rendimento por fonte
 python -m pytest
 ```
 
-97 casos. **Cada teste em `tests/test_regressoes.py` é um bug que aconteceu
+223 casos; os de vários perfis estão em `tests/test_perfis.py`. **Cada teste em `tests/test_regressoes.py` é um bug que aconteceu
 de verdade em produção** num projeto desta família — não são cenários
 hipotéticos. Os comentários trazem o número de vagas que cada um afetou.
 
@@ -205,6 +235,6 @@ e quebra o teste.
 
 ## Ajustar
 
-Tudo que define *o que* procurar está em `radar/config.py`, e nada além de
-dado mora lá. Se for preciso editar qualquer outro arquivo para trocar de
+Tudo que define *o que* procurar está em `radar/config.py` (perfil
+principal) e em `perfis/*.toml` (convidados), e nada além de dado mora lá. Se for preciso editar qualquer outro arquivo para trocar de
 cargo ou de cidade, é bug de desenho.

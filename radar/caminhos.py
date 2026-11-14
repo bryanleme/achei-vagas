@@ -34,3 +34,5 @@ RAIZ = Path(__file__).resolve().parent.parent
 PASTA_DADOS = RAIZ / "data"
 BANCO = PASTA_DADOS / "vagas.db"
 ARQUIVO_ENV = RAIZ / ".env"
+# Um arquivo TOML por perfil convidado. Ver radar/perfis.py.
+PASTA_PERFIS = RAIZ / "perfis"

@@ -343,9 +343,16 @@ LIMIAR_ALERTA_IMEDIATO = 7
 # fechou: o digest nunca dispara, e a fila cresce pra sempre sem que nenhum
 # resumo seja enviado uma única vez.
 #
-# 9 UTC = o ciclo das 09:00 termina por volta das 10:20 UTC = 07:20 em
-# Brasília. Chega de manhã, com a lista da véspera pronta pra revisar.
+# 9 UTC = 06:00 em Brasília. O comentário antigo dizia 07:20 porque contava
+# um ciclo de 80 minutos; hoje o ciclo leva de 1 a 5 minutos, então o resumo
+# sai no primeiro ciclo que rodar depois das 06:00. Na prática o horário
+# varia mais pelo cron do GitHub (MEDIDO: 3 a 4 execuções por dia em vez
+# das 8 agendadas) do que pela duração do ciclo.
 HORA_RESUMO_UTC = 9
+
+# Fuso usado pra contar o "dia" do resumo e pra exibir horários. Brasília,
+# sem horário de verão desde 2019. Ver radar/perfis.py.
+FUSO_RESUMO_UTC = -3
 
 # Vaga publicada há mais de N dias não dispara alerta imediato: vai pro
 # digest com aviso de que pode já estar preenchida. Nunca é descartada —

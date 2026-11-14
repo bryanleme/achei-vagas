@@ -18,6 +18,9 @@ impressão:
            código fica, só sai desta lista.
 """
 
+import re
+import unicodedata
+
 from radar import config
 from radar.fontes import por_cidade, por_empresa, portais, remotas
 from radar.fontes.base import Cadencia, Fonte
@@ -25,11 +28,47 @@ from radar.fontes.gupy import Gupy
 from radar.fontes.linkedin import LinkedIn
 
 
-def fontes_ativas() -> list[Fonte]:
+def _slug(texto: str) -> str:
+    t = unicodedata.normalize("NFKD", texto or "")
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "-", t.lower()).strip("-")
+
+
+def _geografia(perfis) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """(estados, cidades) que as fontes precisam cobrir pra estes perfis.
+
+    estados: [(uf, nome_do_estado)] de todo perfil — Gupy e Catho filtram
+             por estado inteiro e o recorte fino acontece no filtro.
+    cidades: [(cidade, uf)] só de quem aceita presencial ou híbrido, e só
+             as cidades da região (não as "distantes") — perfil só-remoto
+             não precisa de varredura por cidade nenhuma.
+
+    Sem perfis (chamada antiga), cai no config: o comportamento de antes.
+    """
+    if not perfis:
+        estados = [(config.UF_BUSCA.upper(), config.ESTADO_BUSCA)]
+        cidades = [(c, config.UF_BUSCA) for c in config.CIDADES_REGIAO]
+        return estados, cidades
+
+    estados: dict[str, str] = {}
+    cidades: dict[tuple[str, str], None] = {}
+    for p in perfis:
+        estados.setdefault(p.uf, p.estado)
+        r = p.regras
+        if r.aceita_presencial or r.aceita_hibrido:
+            for c in r.cidades:
+                if c not in p.cidades_distantes:
+                    cidades.setdefault((c, p.uf), None)
+    return sorted(estados.items()), list(cidades)
+
+
+def fontes_ativas(perfis=None) -> list[Fonte]:
+    estados, cidades = _geografia(perfis)
     return [
         # A fonte que importa. ATS da indústria brasileira, API JSON com
-        # cidade/estado/modalidade/data em campo próprio.
-        Gupy(estado=config.ESTADO_BUSCA),
+        # cidade/estado/modalidade/data em campo próprio. Uma passada por
+        # estado com perfil, mais a nacional.
+        Gupy(estados=[nome for _, nome in estados]),
 
         # Portais brasileiros generalistas, todos por HTML servido — sem
         # navegador. Cobrem a empresa que não usa Gupy.
@@ -39,7 +78,8 @@ def fontes_ativas() -> list[Fonte]:
 
         portais.VagasCom(),
         portais.InfoJobs(),
-        portais.Catho(uf=config.UF_BUSCA.lower(), estado="sao-paulo"),
+        # Catho põe o estado no caminho da URL: uma instância por UF.
+        *[portais.Catho(uf=uf.lower(), estado=_slug(nome)) for uf, nome in estados],
 
         # Agregadores de remoto internacional. Rendimento esperado baixo pro
         # perfil, custo quase zero. Ver o cabeçalho de remotas.py.
@@ -62,7 +102,7 @@ def fontes_ativas() -> list[Fonte]:
         # é "o que existe em Itapetininga?" — que, pra uma busca presa a uma
         # região, cobre mais: pega vaga de título que nenhum termo do config
         # alcançaria, e não espera rodízio nenhum.
-        *[classe() for classe in por_cidade.TODAS],
+        *([classe(cidades=cidades) for classe in por_cidade.TODAS] if cidades else []),
     ]
 
 
