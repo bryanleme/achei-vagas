@@ -104,8 +104,9 @@ class Gupy(Fonte):
     cadencia = Cadencia.TODO_CICLO
     usa_navegador = False
 
-    def __init__(self, estado: str | None = None):
-        # Duas passadas por termo, e as duas são necessárias:
+    def __init__(self, estado: str | None = None, estados: list[str] | None = None):
+        # Uma passada por estado, mais uma nacional, e as duas são
+        # necessárias:
         #
         #   - com `state`: garante alcançar vaga de cidade pequena do
         #     corredor, que num resultado nacional fica soterrada por SP
@@ -116,13 +117,18 @@ class Gupy(Fonte):
         # Sem a segunda, todo remoto sumiria; sem a primeira, o interior
         # sumiria. Busca nacional não alcança cidade pequena: sem a
         # passada por estado, vaga real do interior nunca seria notificada.
-        self.estado = estado
+        #
+        # Vários estados quando há perfis em UFs diferentes. O nome vai COM
+        # acento — "Parana" devolve zero em silêncio (ver perfis.ESTADO_POR_UF).
+        lista = list(estados or ([estado] if estado else []))
+        self.estados = list(dict.fromkeys(lista))
+        self.estado = self.estados[0] if self.estados else None
 
     async def buscar(self, termo: str, navegador=None) -> Resultado:
         vagas = []
         vistos = set()
 
-        for filtro_estado in ([self.estado, None] if self.estado else [None]):
+        for filtro_estado in [*self.estados, None]:
             for pagina in range(MAX_PAGINAS):
                 params = {
                     "jobName": termo,

@@ -34,12 +34,16 @@ jobs:
         # apareceria às 3 da manhã sem este passo.
         run: |
           python - <<'PY'
-          from radar import ciclo
+          from radar import ciclo, perfis
           from radar.fontes import registro
-          fontes = registro.fontes_ativas()
+          # Valida perfis/*.toml: perfil quebrado tem de quebrar aqui, no
+          # push, e não às 3 da manhã no ciclo.
+          todos = perfis.todos()
+          fontes = registro.fontes_ativas(todos)
           regras = ciclo.regras_do_perfil()
+          print(f"{len(todos)} perfil(is): {[p.id for p in todos]}")
           print(f"{len(fontes)} fonte(s) ativa(s): {[f.nome for f in fontes]}")
           print(f"{len(regras.cargos_fortes)} cargo(s) forte(s), "
-                f"{len(regras.cidades)} cidade(s).")
+                f"{len(regras.cidades)} cidade(s) no principal.")
           assert fontes and regras.cargos_fortes and regras.cidades
           PY

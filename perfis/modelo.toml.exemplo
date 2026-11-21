@@ -1,0 +1,65 @@
+# Modelo de perfil convidado.
+#
+# Copie para perfis/<id>.toml — o nome do arquivo é o id do perfil (letras
+# minúsculas, números e hífen). Ex.: perfis/joao.toml
+#
+# Depois rode:  python main.py --perfis      (valida)
+#               python main.py --convite joao (mostra o link pra mandar à pessoa)
+
+nome = "João"
+
+# Código do convite. Gere um com:  python main.py --novo-convite
+# Quem abrir o link com este código fica com este perfil — trate como senha.
+convite = "TROQUE-por-um-codigo-gerado"
+
+# ativo = false   # desliga o perfil sem apagar o arquivo
+
+[cargo]
+# Nível 1 — o título sozinho já diz a área. Passa sem precisar de mais nada.
+fortes = [
+    "Analista de Atendimento",
+    "Atendente de SAC",
+    "Analista de Suporte ao Cliente",
+]
+
+# Nível 2 — título que existe em várias áreas. Só passa se o título também
+# tiver um dos qualificadores abaixo. Pode ficar vazio.
+ambiguos = ["Assistente Administrativo"]
+qualificadores = ["atendimento", "sac", "relacionamento"]
+
+# Nível 3 — ferramenta no título ("Analista Zendesk"). Só passa junto com
+# palavra de cargo (analista, assistente, especialista...). Pode ficar vazio.
+ferramentas = []
+
+# Palavras no título que derrubam a vaga, por mais que o resto bata.
+exclusoes = ["vendedor externo"]
+
+# Termos de busca a mais (além dos cargos). Ampliam o que chega, não o que passa.
+termos_extra = ["atendimento ao cliente"]
+
+# Até 5 termos buscados em TODA rodada. Sem esta linha, os 5 primeiros
+# "fortes" fazem esse papel.
+# prioritarios = ["analista de atendimento"]
+
+[local]
+uf = "PR"
+# Cidades onde a pessoa aceita trabalhar presencial ou híbrido.
+cidades = ["Curitiba", "São José dos Pinhais"]
+# presencial, hibrido, remoto — qualquer combinação. "Só remoto" = ["remoto"].
+modalidades = ["presencial", "hibrido", "remoto"]
+# Remoto que declara mercado precisa aceitar um destes. Remoto sem mercado
+# declarado passa.
+paises_remoto = ["Brasil"]
+
+[nivel]
+# Júnior, Pleno, Sênior, Especialista, Liderança, Estágio.
+# Nada aqui exclui vaga — só muda a posição no ranking.
+alvo = ["Júnior", "Pleno"]
+acima = ["Sênior", "Especialista", "Liderança"]
+
+[alertas]
+imediato = true        # alerta na hora pra vaga com nota alta
+limiar_imediato = 7    # nota mínima (1-10) pro alerta na hora
+hora_resumo = 8        # resumo diário a partir desta hora (local)
+fuso_utc = -3          # Brasília. Amazonas: -4. Acre: -5.
+max_resumo = 20        # vagas no resumo (até 40)

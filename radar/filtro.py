@@ -14,7 +14,7 @@ passava como remota, com local="Bloomington, IN".
 
 from dataclasses import dataclass, field
 
-from radar.localizacao import casa_cidade
+from radar.localizacao import HIBRIDO, casa_cidade, classificar_modalidade
 from radar.modelos import Vaga
 from radar.texto import contem_cargo, contem_qualquer, normalizar
 
@@ -42,6 +42,12 @@ class Regras:
     # Verificado antes de tudo — ver config.EXCLUSOES_TITULO.
     exclusoes_titulo: list[str] = field(default_factory=list)
     aceita_remoto: bool = True
+    # Modalidades aceitas NAS CIDADES. Independentes entre si e do remoto:
+    # "só remoto" desliga as duas e uma vaga presencial na cidade da pessoa
+    # deixa de passar. Vaga sem modalidade declarada conta como presencial —
+    # é o que ela é na grande maioria dos portais brasileiros.
+    aceita_presencial: bool = True
+    aceita_hibrido: bool = True
     # Mercados aceitos quando a vaga remota DECLARA um escopo geográfico.
     # None desliga a checagem (aceita qualquer remoto). Lista vazia é
     # diferente de None: significa "só aceito remoto sem escopo declarado".
@@ -130,6 +136,20 @@ def avaliar(vaga: Vaga, regras: Regras) -> Avaliacao:
             remota = False
 
     cidade = casa_cidade(vaga.local, regras.cidades, regras.uf_esperada)
+
+    # Vaga REMOTA com a cidade no texto de local: a cidade é a SEDE da
+    # empresa, não onde se trabalha (ver telegram.local_legivel). Pra quem
+    # não aceita remoto, isso não pode virar "presencial na minha cidade".
+    if vaga.remota and not remota:
+        cidade = None
+
+    if cidade is not None and not remota:
+        hibrida = classificar_modalidade(vaga.modalidade) == HIBRIDO
+        if (hibrida and not regras.aceita_hibrido) or (
+            not hibrida and not regras.aceita_presencial
+        ):
+            cidade = None
+
     casa_local = remota or cidade is not None
 
     return Avaliacao(
