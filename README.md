@@ -1,9 +1,10 @@
 # Achei!! Vagas
 
-Monitor automatizado de vagas para um perfil específico: **PCP, Logística e
-Frotas, BI e Indicadores, Auditoria e Conformidade, Melhoria Contínua** —
-com vagas **presenciais ou híbridas em Itapetininga/SP e Sorocaba/SP**, mais
-vagas **remotas em qualquer local do Brasil**.
+Monitor automatizado de vagas para um perfil específico: **Analista de
+Dados, BI e Power BI** (com PCP e logística como plano B, só quando o título
+também fala de dados) — com vagas **presenciais ou híbridas em
+Itapetininga/SP e Sorocaba/SP**, mais vagas **remotas em qualquer local do
+Brasil**, níveis Júnior e Pleno.
 
 Roda sozinho no GitHub Actions a cada 3 horas. Sem servidor, sem custo.
 Avisa no Telegram.
@@ -62,7 +63,7 @@ fonte fica ou sai.
 
 ## Fontes
 
-**19 fontes, nenhuma usando navegador.** Elas se dividem em três formas de
+**22 fontes, nenhuma usando navegador.** Elas se dividem em três formas de
 perguntar, e a diferença entre elas importa mais que a contagem.
 
 **Por termo** — "quem tem vaga de PCP?" — roda a cada 3 horas:
@@ -71,7 +72,8 @@ perguntar, e a diferença entre elas importa mais que a contagem.
 |---|---|
 | Gupy | API JSON |
 | LinkedIn | endpoint de convidado (`geoId`) |
-| Vagas.com · InfoJobs · Catho | HTML servido |
+| Vagas.com · InfoJobs · Catho · Empregos.com.br | HTML servido |
+| Remotar | API JSON (remoto **para o Brasil**) |
 | Remotive · RemoteOK · Jobicy · Himalayas · Arbeitnow · Working Nomads · The Muse | API JSON |
 
 **Por cidade** — "o que existe em Itapetininga ou Sorocaba?" — roda 1× por
@@ -80,7 +82,8 @@ dia nas duas cidades-alvo:
 | Fonte | Tipo |
 |---|---|
 | BNE | HTML, com **modalidade declarada** em campo próprio |
-| Vagas.com · InfoJobs · Catho | HTML servido |
+| Vagas.com · InfoJobs · Empregos.com.br | HTML servido |
+| Catho | HTML servido — **a página da cidade não é da cidade**: o local vem do card |
 
 **Por empresa** — "o que a Smurfit abriu?" — 1× por dia, nas empresas que o
 próprio radar descobriu: Gupy, Vagas.com, InfoJobs.
@@ -106,7 +109,7 @@ que mês que vem publica "Analista de PCP".
 ### O que foi testado e ficou de fora
 
 Cada fonte foi sondada ao vivo antes de virar código. Não entraram:
-Empregos.com.br (HTTP 502), Netvagas (404), Emprega SP (fora do ar),
+Netvagas (404), Emprega SP (fora do ar),
 Jobspresso e 99jobs (sem card no HTML servido), Adzuna e Jooble (exigem
 chave), Teamtailor (406). TrabalhaBrasil e Solides montam a lista só no
 navegador — voltam se alguma expuser API.

@@ -40,6 +40,12 @@ def fontes_ativas() -> list[Fonte]:
         portais.VagasCom(),
         portais.InfoJobs(),
         portais.Catho(uf=config.UF_BUSCA.lower(), estado="sao-paulo"),
+        # Empregos.com.br voltou a responder (era 502) e tem o card mais
+        # completo: cidade+UF, modalidade, data e salário.
+        portais.EmpregosCom(),
+        # Remotar: vaga remota PRO BRASIL, por API JSON. Tapa o buraco entre
+        # os agregadores em inglês e os portais generalistas.
+        portais.Remotar(),
 
         # Agregadores de remoto internacional. Rendimento esperado baixo pro
         # perfil, custo quase zero. Ver o cabeçalho de remotas.py.

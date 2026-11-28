@@ -25,6 +25,7 @@ from radar.fontes.base import (
     Fonte,
     Resultado,
     get_html,
+    get_json,
     montar,
     texto_sem,
 )
@@ -232,4 +233,132 @@ class Catho(Fonte):
         return Resultado(vagas=vagas)
 
 
-TODOS = [VagasCom, InfoJobs, Catho]
+# ---------------------------------------------------------------------------
+# Empregos.com.br
+# ---------------------------------------------------------------------------
+# Estava na lista de "testado e ficou de fora" (HTTP 502). Sondado de novo
+# em 28/11/2026: responde 200 e serve 20 cards por página no HTML, cada um
+# com cidade+UF, modalidade, data relativa e salário em texto próprio — o
+# card mais completo entre os portais brasileiros do projeto.
+
+EMPREGOS_BASE = "https://www.empregos.com.br"
+_LOCAL_EMPREGOS = re.compile(r"^[^\d|]{2,60}, [A-Z]{2}$")
+_MODALIDADES_EMPREGOS = {"presencial", "remoto", "híbrido", "hibrido", "home office"}
+
+
+def cards_empregos(sopa, termo_busca: str) -> list:
+    """Vagas dos cards de uma página de listagem do Empregos.com.br.
+
+    Função de módulo, e não método: a busca por termo e a varredura por
+    cidade (por_cidade.py) leem o MESMO card, e duas cópias do parser
+    divergiriam na primeira mudança de layout.
+
+    O local vem do texto do card ("São Roque, SP"), nunca da cidade
+    pesquisada. MEDIDO: a busca por "analista de logística em Sorocaba"
+    devolve vagas de São Roque, Mairinque e Itu — cidades vizinhas, que só
+    passam no filtro se forem do perfil.
+    """
+    vagas = []
+    for card in sopa.select("div#job-card"):
+        for lixo in card.select('[id^="share"]'):
+            lixo.decompose()
+        no_link = card.select_one('a[href*="/vaga/"]')
+        no_titulo = card.select_one("h2")
+        if not no_link or not no_titulo:
+            continue
+        href = (no_link.get("href") or "").split("?")[0]
+        no_empresa = card.select_one("h3")
+
+        textos = list(card.stripped_strings)
+        local = next((t for t in textos if _LOCAL_EMPREGOS.match(t)), "")
+        modalidade = next((t for t in textos if t.lower() in _MODALIDADES_EMPREGOS), "")
+        publicada = next((t for t in textos if t.lower().startswith("publicada")), "")
+
+        vagas.append(montar(
+            titulo=no_titulo.get_text(" ", strip=True),
+            empresa=no_empresa.get_text(" ", strip=True) if no_empresa else "",
+            local=local,
+            link=f"{EMPREGOS_BASE}{href}" if href.startswith("/") else href,
+            fonte="Empregos.com.br",
+            modalidade=modalidade,
+            publicado_em=datas.extrair_data(None, publicada),
+            termo_busca=termo_busca,
+        ))
+    return [v for v in vagas if v]
+
+
+class EmpregosCom(Fonte):
+    """Empregos.com.br — busca por termo, Brasil inteiro, 20 cards por página.
+
+    Nacional de propósito: é o que traz a vaga remota. A vaga presencial da
+    região vem com mais garantia da varredura por cidade (por_cidade.py).
+    """
+
+    nome = "Empregos.com.br"
+    cadencia = Cadencia.TODO_CICLO
+    MAX_PAGINAS = 2
+
+    async def buscar(self, termo: str, navegador=None) -> Resultado:
+        vagas, vistos = [], set()
+        for pagina in range(1, self.MAX_PAGINAS + 1):
+            sufixo = f"/{pagina}" if pagina > 1 else ""
+            sopa = await get_html(f"{EMPREGOS_BASE}/vagas/{_slug(termo)}{sufixo}")
+            achadas = cards_empregos(sopa, termo)
+            novas = [v for v in achadas if v.link not in vistos]
+            if not novas:
+                break
+            vistos.update(v.link for v in novas)
+            vagas.extend(novas)
+        return Resultado(vagas=vagas)
+
+
+# ---------------------------------------------------------------------------
+# Remotar
+# ---------------------------------------------------------------------------
+# Portal BRASILEIRO de vaga remota, com API JSON pública (a mesma que o site
+# usa). Sondado em 28/11/2026: "analista de dados" -> 381 vagas, 50 por
+# página, cada uma com `type` (remote/hybrid), cidade/UF da híbrida e data
+# ISO. É a fonte que faltava entre os agregadores em inglês de remotas.py e
+# os portais generalistas: remoto PRO Brasil, por definição do site.
+#
+# A busca da API é larga (devolve muito "analista" de outras áreas) — o
+# filtro de título é quem decide, como em toda fonte.
+
+_TIPO_REMOTAR = {"remote": "Remoto", "hybrid": "Híbrido", "onsite": "Presencial",
+                 "on-site": "Presencial", "presential": "Presencial"}
+
+
+def converter_remotar(item: dict, termo_busca: str = ""):
+    modalidade = _TIPO_REMOTAR.get((item.get("type") or "").lower(), "")
+    cidade = (item.get("city") or "").strip()
+    uf = (item.get("state") or "").strip()
+    if modalidade == "Remoto":
+        local = "Remoto"
+    else:
+        local = f"{cidade} - {uf}" if cidade and uf else cidade
+    empresa = item.get("companyDisplayName") or (item.get("company") or {}).get("name") or ""
+    criado = str(item.get("createdAt") or "")[:10]
+    return montar(
+        titulo=item.get("title", ""),
+        empresa=empresa,
+        local=local,
+        link=f"https://remotar.com.br/job/{item['id']}" if item.get("id") else "",
+        fonte="Remotar",
+        modalidade=modalidade,
+        publicado_em=criado if re.match(r"^\d{4}-\d{2}-\d{2}$", criado) else "",
+        descricao=item.get("description", "") or "",
+        termo_busca=termo_busca,
+    )
+
+
+class Remotar(Fonte):
+    nome = "Remotar"
+    cadencia = Cadencia.TODO_CICLO
+
+    async def buscar(self, termo: str, navegador=None) -> Resultado:
+        dados = await get_json("https://api.remotar.com.br/jobs", params={"search": termo})
+        vagas = [converter_remotar(i, termo) for i in (dados.get("data") or [])]
+        return Resultado(vagas=[v for v in vagas if v])
+
+
+TODOS = [VagasCom, InfoJobs, Catho, EmpregosCom, Remotar]

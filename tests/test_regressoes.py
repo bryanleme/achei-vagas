@@ -47,7 +47,7 @@ def test_a1_titulo_com_remote_nao_torna_a_vaga_remota(regras):
 
 def test_a1_local_remoto_de_verdade_continua_passando(regras):
     """A correção acima não pode ter fechado o caminho legítimo."""
-    v = vaga(titulo="Analista de PCP", local="Remoto", modalidade="Remoto")
+    v = vaga(titulo="Analista de Dados", local="Remoto", modalidade="Remoto")
     assert v.remota is True
     assert combina(v, regras) is True
 
@@ -296,7 +296,7 @@ def test_f3_vaga_remota_americana_e_rejeitada(regras):
 def test_f3_remoto_sem_escopo_declarado_continua_passando(regras):
     """A maioria das vagas remotas não declara mercado nenhum. Não há base
     pra rejeitar — "duplicar é aceitável, perder não"."""
-    v = vaga(titulo="Analista de Processos", local="Remoto", modalidade="Remoto")
+    v = vaga(titulo="Analista de BI", local="Remoto", modalidade="Remoto")
     resultado = avaliar(v, regras)
     assert resultado.aprovada is True
     assert resultado.escopo == set()
@@ -308,8 +308,9 @@ def test_f3_remoto_sem_escopo_declarado_continua_passando(regras):
 # ===========================================================================
 
 def test_cargo_forte_passa_sozinho(regras):
-    assert combina(vaga(titulo="Analista de PCP"), regras) is True
-    assert combina(vaga(titulo="Analista de Logística Pleno"), regras) is True
+    assert combina(vaga(titulo="Analista de Dados"), regras) is True
+    assert combina(vaga(titulo="Analista de BI Pleno"), regras) is True
+    assert combina(vaga(titulo="Desenvolvedor Power BI"), regras) is True
 
 
 def test_cargo_ambiguo_sozinho_nao_passa(regras):
@@ -320,13 +321,13 @@ def test_cargo_ambiguo_sozinho_nao_passa(regras):
 
 
 def test_cargo_ambiguo_com_dominio_passa(regras):
-    assert combina(vaga(titulo="Analista Administrativo de Frotas"), regras) is True
-    assert combina(vaga(titulo="Analista de Planejamento de Produção"), regras) is True
+    assert combina(vaga(titulo="Analista Administrativo de Indicadores"), regras) is True
+    assert combina(vaga(titulo="Analista de BI e BI"), regras) is True
 
 
 def test_ferramenta_sozinha_nao_passa(regras):
     """"Power BI" sozinho aprovaria vaga de desenvolvimento."""
-    assert combina(vaga(titulo="Desenvolvedor Power BI + Python"), regras) is False
+    assert combina(vaga(titulo="Desenvolvedor Python (Power BI)"), regras) is False
     assert combina(vaga(titulo="Power BI Specialist"), regras) is True  # tem cargo junto
 
 
@@ -344,8 +345,8 @@ def test_conectivo_ausente_nao_derruba_o_cargo(regras):
     """Metade das vagas escreve "Analista PCP" e a outra metade "Analista de
     PCP". Exigir a frase exata perde a primeira metade."""
     assert esqueleto("Analista de PCP") == "analista pcp"
-    assert combina(vaga(titulo="Analista PCP Júnior"), regras) is True
-    assert combina(vaga(titulo="Analista Logística"), regras) is True
+    assert combina(vaga(titulo="Analista BI Júnior"), regras) is True
+    assert combina(vaga(titulo="Analista Dados"), regras) is True
 
 
 def test_cargo_parecido_mas_diferente_nao_passa(regras):
@@ -362,7 +363,7 @@ def test_cargo_parecido_mas_diferente_nao_passa(regras):
 def test_presencial_fora_das_cidades_aceitas_nao_passa(regras):
     """Cidade de SP que não está em nenhuma das duas faixas continua fora."""
     for cidade in ["Ribeirão Preto", "São José dos Campos", "Santos", "Bauru"]:
-        v = vaga(titulo="Analista de PCP", local=f"{cidade} - SP")
+        v = vaga(titulo="Analista de Dados", local=f"{cidade} - SP")
         assert combina(v, regras) is False, cidade
 
 
@@ -379,7 +380,7 @@ def test_config_aceita_exatamente_as_duas_cidades():
 @pytest.mark.parametrize("cidade", ["Itapetininga", "Sorocaba"])
 def test_presencial_e_hibrida_nas_duas_cidades_passam(regras, modalidade, cidade):
     v = vaga(
-        titulo="Analista de Logística",
+        titulo="Analista de BI",
         local=f"{cidade} - SP",
         modalidade=modalidade,
     )
@@ -396,7 +397,7 @@ def test_presencial_e_hibrida_fora_das_duas_cidades_nao_passam(
 ):
     uf = "PE" if cidade == "Recife" else "SP"
     v = vaga(
-        titulo="Analista de PCP",
+        titulo="Analista de Dados",
         local=f"{cidade} - {uf}",
         modalidade=modalidade,
     )
@@ -415,7 +416,7 @@ def test_presencial_e_hibrida_fora_das_duas_cidades_nao_passam(
 )
 def test_remota_em_qualquer_local_do_brasil_passa(regras, local):
     v = vaga(
-        titulo="Analista de PCP",
+        titulo="Analista de Dados",
         local=local,
         modalidade="Remoto",
     )
@@ -425,7 +426,7 @@ def test_remota_em_qualquer_local_do_brasil_passa(regras, local):
 
 
 def test_cargo_certo_local_errado_nao_passa(regras):
-    assert combina(vaga(titulo="Analista de PCP", local="Recife - PE"), regras) is False
+    assert combina(vaga(titulo="Analista de Dados", local="Recife - PE"), regras) is False
 
 
 def test_local_certo_cargo_errado_nao_passa(regras):
@@ -440,8 +441,8 @@ def test_local_certo_cargo_errado_nao_passa(regras):
     "titulo",
     [
         "ANALISTA DE LOGÍSTICA JUNIOR - Vaga Exclusiva para Pessoas com Deficiência (PCD)",
-        "Analista de Logística JR. (Vaga exclusiva para PCD)",
-        "Analista de PCP - PCD",
+        "Analista de BI JR. (Vaga exclusiva para PCD)",
+        "Analista de Dados - PCD",
         "Analista de Processos (Pessoa com Deficiência)",
         "Analista de BI — vaga para portadores de deficiência",
     ],
@@ -463,7 +464,7 @@ def test_vaga_reservada_a_pcd_e_descartada(titulo, regras):
 def test_exclusao_nao_conta_como_barrada_pelo_cargo(regras):
     """Vaga excluída não pode poluir o diagnóstico de "barrada só pelo
     título" — ela nem chegou a ser avaliada por cargo."""
-    v = vaga(titulo="Analista de PCP (PCD)", local="Sorocaba - SP")
+    v = vaga(titulo="Analista de Dados (PCD)", local="Sorocaba - SP")
     resultado = avaliar(v, regras)
     assert resultado.excluida is True
     assert resultado.casa_cargo is False
@@ -472,14 +473,14 @@ def test_exclusao_nao_conta_como_barrada_pelo_cargo(regras):
 def test_pcd_nao_bate_dentro_de_outra_palavra(regras):
     """"pcd" tem três letras e a busca é por palavra inteira. Se batesse por
     substring, qualquer título com essas letras seguidas seria descartado."""
-    for titulo in ["Analista de PCP", "Analista de PCP Pleno", "Especialista PCPD"]:
+    for titulo in ["Analista de Dados", "Analista de Dados Pleno", "Especialista PCPD"]:
         v = vaga(titulo=titulo, local="Sorocaba - SP")
         assert avaliar(v, regras).excluida is False, titulo
 
 
 def test_vaga_normal_continua_passando(regras):
     """A exclusão não pode ter derrubado o caso comum."""
-    v = vaga(titulo="Analista de Logística Junior", local="Sorocaba - SP")
+    v = vaga(titulo="Analista de BI Junior", local="Sorocaba - SP")
     assert avaliar(v, regras).aprovada is True
 
 
@@ -629,7 +630,7 @@ def test_e4_estado_no_texto_nao_vira_a_cidade(local, regras):
     from radar.localizacao import casa_cidade
 
     assert casa_cidade(local, config.CIDADES, "SP") is None
-    assert combina(vaga(titulo="Analista de PCP", local=local), regras) is False
+    assert combina(vaga(titulo="Analista de Dados", local=local), regras) is False
 
 
 def test_e4_capital_nao_esta_no_novo_recorte():
@@ -662,3 +663,69 @@ def test_e4_cidade_de_verdade_nao_foi_quebrada(local, esperado):
     from radar.localizacao import casa_cidade
 
     assert casa_cidade(local, config.CIDADES, "SP") == esperado
+
+
+# ===========================================================================
+# Catho por cidade: a página da cidade não é da cidade
+# ===========================================================================
+
+def test_catho_por_cidade_usa_o_local_do_card_e_nao_a_cidade_pesquisada(regras):
+    """MEDIDO em 28/11/2026: /vagas/sp-itapetininga/ devolveu 20 cards e
+    nenhum era de Itapetininga. O código gravava local=cidade pesquisada, e
+    28 vagas de outras cidades (uma de Palmas/TO, nota 10) chegaram como
+    alerta imediato "em Itapetininga"."""
+    from bs4 import BeautifulSoup
+
+    from radar.fontes.por_cidade import _local_do_card_catho
+
+    html = """
+    <article><h2><a href="/vagas/analista-de-logistica-jr-agronegocio/39458158">
+      ANALISTA DE LOGISTICA JR - Agronegócio</a></h2>
+      <p class="mb-2"><span>KAIROS RH</span></p>
+      <p><span class="location-icon"></span>1\r\nvaga - Palmas</p>
+    </article>
+    <article><h2><a href="/vagas/x/1">Analista de PCP</a></h2></article>
+    """
+    cards = BeautifulSoup(html, "lxml").select("article")
+    assert _local_do_card_catho(cards[0]) == "Palmas"
+    assert _local_do_card_catho(cards[1]) == ""  # sem local: não inventa
+
+    palmas = vaga(titulo="ANALISTA DE LOGISTICA JR - Agronegócio", local="Palmas")
+    assert not avaliar(palmas, regras).aprovada
+    sem_local = vaga(titulo="Analista de PCP", local="")
+    assert not avaliar(sem_local, regras).aprovada
+
+
+# ===========================================================================
+# Troca de alvo (28/11/2026): dados e BI no centro, logística como plano B
+# ===========================================================================
+
+@pytest.mark.parametrize("titulo", [
+    "Analista de Dados Júnior",
+    "Analista de BI Pleno",
+    "Analista de Business Intelligence",
+    "Desenvolvedor Power BI",
+    "Analista Power BI",              # ferramenta + palavra de cargo
+    "Especialista em Power BI",
+    "Analista Power Platform",
+    "Analista de Logística e Indicadores",  # plano B com qualificador de dados
+    "Analista de PCP - BI",
+])
+def test_alvo_de_dados_passa(regras, titulo):
+    assert combina(vaga(titulo=titulo, local="Remoto", modalidade="Remoto"), regras), titulo
+
+
+@pytest.mark.parametrize("titulo", [
+    "Analista de Logística",          # plano B sem qualificador de dados
+    "Analista de PCP Jr",
+    "Analista de Melhoria Contínua",
+    "Analista de Dados Cadastrais",   # entrada de dados, outra profissão
+    "Analista de Cadastro",
+    "Analista de Proteção de Dados",  # LGPD
+    "Cientista de Dados",             # fora do alvo atual
+    "Engenheiro de Dados",
+    "Analista de Banco de Dados SQL Server",  # DBA
+    "Desenvolvedor Python",
+])
+def test_fora_do_alvo_nao_passa(regras, titulo):
+    assert not combina(vaga(titulo=titulo, local="Remoto", modalidade="Remoto"), regras), titulo
