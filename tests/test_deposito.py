@@ -5,6 +5,8 @@ import pytest
 from radar import ciclo, config, deposito
 from tests.conftest import vaga
 
+PRINCIPAL = deposito.PERFIL_LEGADO
+
 
 @pytest.fixture(autouse=True)
 def banco_temporario(tmp_path, monkeypatch):
@@ -14,7 +16,7 @@ def banco_temporario(tmp_path, monkeypatch):
 
 
 def _guardar(v, relevancia=8, digest=False):
-    deposito.salvar(v, relevancia, "cargo direto", digest_pendente=digest)
+    deposito.salvar(v, PRINCIPAL, relevancia, "cargo direto", digest_pendente=digest)
 
 
 # ===========================================================================
@@ -23,9 +25,9 @@ def _guardar(v, relevancia=8, digest=False):
 
 def test_dedup_pelo_link():
     v = vaga()
-    assert deposito.vaga_conhecida(v) is False
+    assert deposito.vaga_conhecida(v, PRINCIPAL) is False
     _guardar(v)
-    assert deposito.vaga_conhecida(v) is True
+    assert deposito.vaga_conhecida(v, PRINCIPAL) is True
 
 
 def test_dedup_por_empresa_e_titulo_em_fonte_diferente():
@@ -42,7 +44,7 @@ def test_dedup_por_empresa_e_titulo_em_fonte_diferente():
     republicada = vaga(link="https://linkedin.com/jobs/999", fonte="LinkedIn")
     assert republicada.id != primeira.id
     assert republicada.chave_secundaria == primeira.chave_secundaria
-    assert deposito.vaga_conhecida(republicada) is True
+    assert deposito.vaga_conhecida(republicada, PRINCIPAL) is True
 
 
 def test_chave_secundaria_nunca_e_nula():
@@ -97,7 +99,7 @@ def test_vaga_abaixo_do_limiar_entra_na_fila():
     _guardar(vaga(link="https://exemplo.com/a"), relevancia=4, digest=True)
     _guardar(vaga(link="https://exemplo.com/b", titulo="Analista de BI"), relevancia=9)
 
-    pendentes = deposito.pendentes_do_digest()
+    pendentes = deposito.pendentes_do_digest(PRINCIPAL)
     assert len(pendentes) == 1
     assert pendentes[0][0] == "Analista de PCP"
 
@@ -108,7 +110,7 @@ def test_fila_vem_ordenada_da_mais_relevante():
             vaga(link=f"https://exemplo.com/{i}", titulo=f"Analista de Processos {i}"),
             relevancia=nota, digest=True,
         )
-    notas = [linha[3] for linha in deposito.pendentes_do_digest()]
+    notas = [linha[3] for linha in deposito.pendentes_do_digest(PRINCIPAL)]
     assert notas == [9, 6, 3]
 
 
@@ -142,11 +144,11 @@ def test_fila_descarta_vaga_que_nao_atende_mais_ao_perfil():
     )
 
     descartadas = deposito.descartar_pendentes_fora_do_perfil(
-        ciclo.regras_do_perfil()
+        PRINCIPAL, ciclo.regras_do_perfil()
     )
 
     assert descartadas == 1
-    pendentes = deposito.pendentes_do_digest()
+    pendentes = deposito.pendentes_do_digest(PRINCIPAL)
     assert {linha[0] for linha in pendentes} == {
         "Analista de Logística",
         "Analista de BI",
@@ -155,9 +157,9 @@ def test_fila_descarta_vaga_que_nao_atende_mais_ao_perfil():
 
 def test_fila_so_e_limpa_depois_do_envio_confirmado():
     _guardar(vaga(), relevancia=4, digest=True)
-    assert len(deposito.pendentes_do_digest()) == 1
-    assert deposito.limpar_fila_do_digest() == 1
-    assert deposito.pendentes_do_digest() == []
+    assert len(deposito.pendentes_do_digest(PRINCIPAL)) == 1
+    assert deposito.limpar_fila_do_digest(PRINCIPAL) == 1
+    assert deposito.pendentes_do_digest(PRINCIPAL) == []
 
 
 # ===========================================================================
@@ -199,7 +201,7 @@ def test_g2_rodizio_cobre_todos_os_termos_com_o_tempo():
 def test_feedback_e_gravado_na_vaga():
     v = vaga()
     _guardar(v)
-    assert deposito.registrar_feedback(v.id, "positivo") is True
+    assert deposito.registrar_feedback(PRINCIPAL, v.id, "positivo") is True
     linhas = deposito.precisao_por_fonte()
     assert linhas[0][2] == 1  # um 👍
 
@@ -217,10 +219,10 @@ def test_vaga_confidencial_nao_engole_outra_do_mesmo_titulo():
     assert segunda.chave_secundaria == ""
 
     _guardar(primeira)
-    assert deposito.vaga_conhecida(segunda) is False, "vaga distinta foi engolida"
+    assert deposito.vaga_conhecida(segunda, PRINCIPAL) is False, "vaga distinta foi engolida"
     _guardar(segunda)
-    assert deposito.vaga_conhecida(primeira) is True
-    assert deposito.vaga_conhecida(segunda) is True
+    assert deposito.vaga_conhecida(primeira, PRINCIPAL) is True
+    assert deposito.vaga_conhecida(segunda, PRINCIPAL) is True
 
 
 def test_com_empresa_a_segunda_chave_volta_a_valer():
@@ -228,7 +230,7 @@ def test_com_empresa_a_segunda_chave_volta_a_valer():
     a = vaga(empresa="Yazaki", link="https://gupy.io/1")
     b = vaga(empresa="Yazaki", link="https://vagas.com.br/2")
     _guardar(a)
-    assert deposito.vaga_conhecida(b) is True
+    assert deposito.vaga_conhecida(b, PRINCIPAL) is True
 
 
 def test_varredura_inicial_segura_o_alerta_imediato():

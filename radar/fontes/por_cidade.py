@@ -20,6 +20,11 @@ O custo é o que justifica a cadência diária: 35 cidades × 4 portais é ordem
 300 requisições. Vaga não abre de minuto em minuto, e o ciclo de 3 horas
 continua fazendo a busca por termo, que é a rápida.
 
+QUALQUER UF. Cada cidade vem com a sua UF — (cidade, uf) — porque os quatro
+portais põem a sigla no caminho da URL. MEDIDO ao vivo em Curitiba/PR e
+Recife/PE: os mesmos padrões de endereço respondem com cards nos quatro.
+Cidade sem UF (lista de texto, formato antigo) é tratada como SP.
+
 SÓ AS CIDADES DA REGIÃO. São Paulo e Campinas ficam de fora de propósito:
 sozinhas têm mais vaga que as 35 juntas, e varrê-las por cidade traria
 milhares de vagas que a faixa distante já rebaixa no ranking. Elas continuam
@@ -54,17 +59,22 @@ class VarreduraPorCidade(Fonte):
     max_simultaneas = 3
     pausa = 0.3
 
-    def __init__(self, cidades: list[str] | None = None):
-        self.cidades = cidades if cidades is not None else config.CIDADES_REGIAO
+    def __init__(self, cidades: list | None = None):
+        if cidades is None:
+            cidades = config.CIDADES_REGIAO
+        self.cidades = [
+            (c, config.UF_BUSCA.lower()) if isinstance(c, str) else (c[0], c[1].lower())
+            for c in cidades
+        ]
 
-    async def _vagas_da_cidade(self, cidade: str) -> list:
+    async def _vagas_da_cidade(self, cidade: str, uf: str) -> list:
         raise NotImplementedError
 
     async def buscar(self, termo: str = "", navegador=None) -> Resultado:
         vagas, vistos = [], set()
-        for cidade in self.cidades:
+        for cidade, uf in self.cidades:
             try:
-                achadas = await self._vagas_da_cidade(cidade)
+                achadas = await self._vagas_da_cidade(cidade, uf)
             except Exception:
                 # Uma cidade sem página no portal não pode derrubar as 34
                 # restantes. Cidade pequena costuma nem existir na URL.
@@ -96,8 +106,8 @@ class BNE(VarreduraPorCidade):
     nome = "BNE"
     BASE = "https://www.bne.com.br"
 
-    async def _vagas_da_cidade(self, cidade: str) -> list:
-        sopa = await get_html(f"{self.BASE}/vagas-de-emprego/{_slug(cidade)}-sp")
+    async def _vagas_da_cidade(self, cidade: str, uf: str) -> list:
+        sopa = await get_html(f"{self.BASE}/vagas-de-emprego/{_slug(cidade)}-{uf}")
         vagas = []
         for card in sopa.select("section.job__card__container"):
             no_titulo = card.select_one("h2 strong")
@@ -114,7 +124,7 @@ class BNE(VarreduraPorCidade):
             # deslocar cidade pra dentro de modalidade.
             empresa = campos[1] if len(campos) > 1 else ""
             modalidade = campos[2] if len(campos) > 2 else ""
-            local = campos[3] if len(campos) > 3 else cidade
+            local = campos[3] if len(campos) > 3 else f"{cidade} - {uf.upper()}"
 
             vagas.append(montar(
                 titulo=no_titulo.get_text(" ", strip=True),
@@ -135,11 +145,11 @@ class VagasComPorCidade(VarreduraPorCidade):
     BASE = "https://www.vagas.com.br"
     MAX_PAGINAS = 3
 
-    async def _vagas_da_cidade(self, cidade: str) -> list:
+    async def _vagas_da_cidade(self, cidade: str, uf: str) -> list:
         vagas = []
         for pagina in range(1, self.MAX_PAGINAS + 1):
             sopa = await get_html(
-                f"{self.BASE}/vagas-em-{_slug(cidade)}-sp",
+                f"{self.BASE}/vagas-em-{_slug(cidade)}-{uf}",
                 params={"pagina": pagina} if pagina > 1 else None,
             )
             cards = sopa.select("li.vaga")
@@ -157,7 +167,7 @@ class VagasComPorCidade(VarreduraPorCidade):
                 vagas.append(montar(
                     titulo=no_link.get("title") or no_link.get_text(strip=True),
                     empresa=nome_empresa,
-                    local=texto_sem(card.select_one("div.vaga-local"), ".tooltip-place") or cidade,
+                    local=texto_sem(card.select_one("div.vaga-local"), ".tooltip-place") or f"{cidade} - {uf.upper()}",
                     link=f"{self.BASE}{href}" if href.startswith("/") else href,
                     fonte="Vagas.com",
                     publicado_em=datas.extrair_data(
@@ -178,11 +188,11 @@ class InfoJobsPorCidade(VarreduraPorCidade):
     BASE = "https://www.infojobs.com.br"
     MAX_PAGINAS = 3
 
-    async def _vagas_da_cidade(self, cidade: str) -> list:
+    async def _vagas_da_cidade(self, cidade: str, uf: str) -> list:
         vagas = []
         for pagina in range(1, self.MAX_PAGINAS + 1):
             sopa = await get_html(
-                f"{self.BASE}/empregos-em-{_slug(cidade)},-sp.aspx",
+                f"{self.BASE}/empregos-em-{_slug(cidade)},-{uf}.aspx",
                 params={"Page": pagina} if pagina > 1 else None,
             )
             cards = sopa.select('div[id^="vacancy"]')
@@ -221,8 +231,8 @@ class CathoPorCidade(VarreduraPorCidade):
     nome = "Catho (por cidade)"
     BASE = "https://www.catho.com.br/vagas"
 
-    async def _vagas_da_cidade(self, cidade: str) -> list:
-        sopa = await get_html(f"{self.BASE}/sp-{_slug(cidade)}/")
+    async def _vagas_da_cidade(self, cidade: str, uf: str) -> list:
+        sopa = await get_html(f"{self.BASE}/{uf}-{_slug(cidade)}/")
         vagas = []
         for card in sopa.select("article"):
             no_titulo = card.select_one("h2 a") or card.select_one("h2")
@@ -233,7 +243,9 @@ class CathoPorCidade(VarreduraPorCidade):
             vagas.append(montar(
                 titulo=no_titulo.get_text(strip=True),
                 empresa=no_empresa.get_text(strip=True) if no_empresa else "",
-                local=cidade,
+                # Com a UF: "Curitiba" sozinho passaria pela guarda de UF de
+                # qualquer perfil que tivesse uma cidade com esse nome.
+                local=f"{cidade} - {uf.upper()}",
                 link=(f"https://www.catho.com.br{href}"
                       if href and href.startswith("/") else (href or "")),
                 fonte="Catho",
