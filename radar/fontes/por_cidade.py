@@ -108,13 +108,20 @@ class BNE(VarreduraPorCidade):
             if not ident:
                 continue
 
-            campos = [h.get_text(" ", strip=True)
-                      for h in card.select("div.info__vaga > h3")]
+            # MEDIDO em 28/11/2026: o BNE trocou `h3` por
+            # `div.info__vaga-item` (mesma ordem: área, empresa, modalidade,
+            # cidade). Com o seletor antigo `campos` vinha vazio e o local
+            # caía na cidade PESQUISADA — o mesmo erro da Catho, escondido.
+            # Os dois seletores ficam: o que o portal servir, vale.
+            itens = card.select("div.info__vaga > div.info__vaga-item") or                 card.select("div.info__vaga > h3")
+            campos = [h.get_text(" ", strip=True) for h in itens]
             # Posições fixas, mas com guarda: card incompleto não pode
             # deslocar cidade pra dentro de modalidade.
             empresa = campos[1] if len(campos) > 1 else ""
             modalidade = campos[2] if len(campos) > 2 else ""
-            local = campos[3] if len(campos) > 3 else cidade
+            # Sem o campo de cidade, "" — nunca a cidade pesquisada. Ver
+            # _local_do_card_catho: a página de uma cidade nem sempre é dela.
+            local = campos[3] if len(campos) > 3 else ""
 
             vagas.append(montar(
                 titulo=no_titulo.get_text(" ", strip=True),
@@ -157,7 +164,7 @@ class VagasComPorCidade(VarreduraPorCidade):
                 vagas.append(montar(
                     titulo=no_link.get("title") or no_link.get_text(strip=True),
                     empresa=nome_empresa,
-                    local=texto_sem(card.select_one("div.vaga-local"), ".tooltip-place") or cidade,
+                    local=texto_sem(card.select_one("div.vaga-local"), ".tooltip-place"),
                     link=f"{self.BASE}{href}" if href.startswith("/") else href,
                     fonte="Vagas.com",
                     publicado_em=datas.extrair_data(
@@ -205,7 +212,7 @@ class InfoJobsPorCidade(VarreduraPorCidade):
                     empresa=no_empresa.get_text(strip=True) if no_empresa else "",
                     empresa_url=empresa_href.split("?")[0],
                     local=(no_local.get_text(" ", strip=True).split(",")[0]
-                           if no_local else cidade),
+                           if no_local else ""),
                     link=f"{self.BASE}{href}" if href.startswith("/") else href,
                     fonte="InfoJobs",
                     termo_busca=f"cidade:{cidade}",
@@ -268,4 +275,31 @@ class CathoPorCidade(VarreduraPorCidade):
         return vagas
 
 
-TODAS = [BNE, VagasComPorCidade, InfoJobsPorCidade, CathoPorCidade]
+class EmpregosComPorCidade(VarreduraPorCidade):
+    """Empregos.com.br por cidade — /vagas/em-<cidade>-sp.
+
+    Ao contrário da Catho, esta página é DA cidade: MEDIDO em 28/11/2026,
+    /vagas/em-itapetininga-sp disse "46 vagas de emprego em Itapetininga,
+    SP". Mesmo assim o local vem do card (cards_empregos), não da URL — a
+    lição da Catho é não confiar no que a página promete.
+    """
+
+    nome = "Empregos.com.br (por cidade)"
+    MAX_PAGINAS = 3
+
+    async def _vagas_da_cidade(self, cidade: str) -> list:
+        from radar.fontes.portais import EMPREGOS_BASE, cards_empregos
+
+        vagas, vistos = [], set()
+        for pagina in range(1, self.MAX_PAGINAS + 1):
+            sufixo = f"/{pagina}" if pagina > 1 else ""
+            sopa = await get_html(f"{EMPREGOS_BASE}/vagas/em-{_slug(cidade)}-sp{sufixo}")
+            novas = [v for v in cards_empregos(sopa, f"cidade:{cidade}") if v.link not in vistos]
+            if not novas:
+                break
+            vistos.update(v.link for v in novas)
+            vagas.extend(novas)
+        return vagas
+
+
+TODAS = [BNE, VagasComPorCidade, InfoJobsPorCidade, CathoPorCidade, EmpregosComPorCidade]

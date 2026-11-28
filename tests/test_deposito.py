@@ -46,7 +46,7 @@ def test_dedup_por_empresa_e_titulo_em_fonte_diferente():
 
 
 def test_chave_secundaria_nunca_e_nula():
-    _guardar(vaga(empresa="", titulo="Analista de PCP"))
+    _guardar(vaga(empresa="", titulo="Analista de Dados"))
     with deposito._conectar() as conn:
         nulas = conn.execute(
             "SELECT COUNT(*) FROM vagas WHERE chave_secundaria IS NULL"
@@ -74,7 +74,7 @@ def test_banco_recriado_do_zero_aborta_o_ciclo():
     rodar renotificando tudo.
     """
     _guardar(vaga(link="https://exemplo.com/1"))
-    _guardar(vaga(link="https://exemplo.com/2", titulo="Analista de Logística"))
+    _guardar(vaga(link="https://exemplo.com/2", titulo="Analista de BI"))
     assert deposito.registrar_total() == 2
 
     with deposito._conectar() as conn:
@@ -99,7 +99,7 @@ def test_vaga_abaixo_do_limiar_entra_na_fila():
 
     pendentes = deposito.pendentes_do_digest()
     assert len(pendentes) == 1
-    assert pendentes[0][0] == "Analista de PCP"
+    assert pendentes[0][0] == "Analista de Dados"
 
 
 def test_fila_vem_ordenada_da_mais_relevante():
@@ -115,7 +115,7 @@ def test_fila_vem_ordenada_da_mais_relevante():
 def test_fila_descarta_vaga_que_nao_atende_mais_ao_perfil():
     _guardar(
         vaga(
-            titulo="Analista de PCP",
+            titulo="Analista de Dados",
             local="Tatuí - SP",
             modalidade="Presencial",
             link="https://exemplo.com/tatui",
@@ -124,7 +124,7 @@ def test_fila_descarta_vaga_que_nao_atende_mais_ao_perfil():
     )
     _guardar(
         vaga(
-            titulo="Analista de Logística",
+            titulo="Analista de BI",
             local="Sorocaba - SP",
             modalidade="Híbrido",
             link="https://exemplo.com/sorocaba",
@@ -148,7 +148,7 @@ def test_fila_descarta_vaga_que_nao_atende_mais_ao_perfil():
     assert descartadas == 1
     pendentes = deposito.pendentes_do_digest()
     assert {linha[0] for linha in pendentes} == {
-        "Analista de Logística",
+        "Analista de BI",
         "Analista de BI",
     }
 
@@ -354,3 +354,29 @@ def test_url_de_empresa_e_preservada_quando_um_card_vem_sem_ela():
     assert deposito.empresas_com_url("Vagas.com") == [
         ("Yazaki", "https://www.vagas.com.br/vagas-de-yazaki")
     ]
+
+
+# ===========================================================================
+# Rajada depois de trocar o perfil ou ligar fonte nova
+# ===========================================================================
+
+def test_perfil_novo_religa_a_varredura_inicial():
+    """Trocar o alvo tem o efeito de um banco vazio: os termos novos trazem
+    tudo o que já estava publicado. Sem religar a varredura, isso chegaria
+    como rajada de alerta imediato."""
+    deposito.gravar(ciclo.CHAVE_VOLTAS, "5")
+    deposito.gravar(ciclo.CHAVE_PERFIL_VERSAO, "versao-antiga")
+    assert ciclo.em_varredura_inicial() is False
+
+    assert ciclo.reiniciar_varredura_se_o_perfil_mudou() is True
+    assert ciclo.em_varredura_inicial() is True
+    # Uma vez só: no ciclo seguinte, mesma versão, nada muda.
+    assert ciclo.reiniciar_varredura_se_o_perfil_mudou() is False
+
+
+def test_fonte_nova_nao_alerta_na_primeira_rodada():
+    import inspect
+
+    fonte = inspect.getsource(ciclo.rodar)
+    assert "and not fonte_estreando" in fonte
+    assert "CHAVE_FONTE_VISTA" in fonte

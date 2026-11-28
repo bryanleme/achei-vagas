@@ -25,143 +25,116 @@ load_dotenv()
 # NÍVEL 1 — cargo forte: o título sozinho já identifica a área. Passa sem
 # precisar de mais nada.
 #
-# "Analista de Qualidade" ficou de FORA de propósito: puxa vaga de controle
-# de qualidade industrial (inspeção de peça em linha de produção), que é
-# outra profissão. Se um dia interessar, entra como cargo ambíguo (nível 2),
-# não como forte.
+# ALVO TROCADO em 28/11/2026: o perfil era PCP, logística, frotas e Melhoria
+# Contínua; o usuário passou a Analista de Dados (Sabesp, set/2026) e o alvo
+# agora é dados e BI na plataforma Microsoft. Logística e PCP continuam como
+# plano B, mas só como cargo AMBÍGUO (nível 2): "Analista de Logística"
+# sozinho deixou de passar; "Analista de Logística e Indicadores" passa.
+#
+# "Cientista de Dados" e "Engenheiro de Dados" ficaram de FORA: pedem
+# Python/SQL avançados, que hoje são o ponto fraco declarado do perfil.
+# "Desenvolvedor" entra só colado em BI ou Power Platform — "Desenvolvedor"
+# genérico continua sendo vaga de software.
 CARGOS_FORTES = [
-    # PCP / Planejamento de Produção
-    "Analista de PCP",
-    "Analista de Planejamento e Controle de Produção",
-    "Analista de Planejamento de Produção",
-    "Analista de Programação e Sequenciamento",
-    "Planejador de Produção",
-    "Programador de Produção",
-    "Coordenador de PCP",
-    "Supervisor de PCP",
-    "Production Planning Analyst",
-    "Production Planner",
-
-    # Logística, Frotas e Roteirização
-    "Analista de Logística",
-    "Analista Logístico",
-    "Analista de Roteirização",
-    "Analista de Gestão de Frotas",
-    "Analista de Frotas",
-    "Analista de Transportes",
-    "Analista de Operações Logísticas",
-    "Analista de Suprimentos",
-    "Analista de Supply Chain",
-    "Coordenador de Logística",
-    "Supervisor de Logística",
-    "Logistics Analyst",
-    "Fleet Analyst",
-    "Supply Chain Analyst",
-
-    # Business Intelligence e Indicadores
+    # Dados e BI
+    "Analista de Dados",
     "Analista de BI",
     "Analista de Business Intelligence",
+    "Analista de Inteligência de Dados",
+    "Analista de Inteligência de Negócios",
+    "Analista de Analytics",
+    "Analista de Data Analytics",
     "Analista de Indicadores",
-    "Analista de Dados",
-    "Business Intelligence Analyst",
-    "BI Analyst",
+    "Analista de Dados e Processos",
+    "Especialista em BI",
+    "Especialista em Power BI",
+    "Consultor de BI",
+    "Consultor Power BI",
+    "Desenvolvedor BI",
+    "Desenvolvedor de BI",
+    "Desenvolvedor Power BI",
     "Data Analyst",
+    "BI Analyst",
+    "Business Intelligence Analyst",
+    "BI Developer",
+    "Power BI Developer",
 
-    # Auditoria, Conformidade e Certificação (automotivo)
-    "Analista de Auditoria",
-    "Analista de Auditoria e Conformidade",
-    "Analista de Conformidade",
-    "Analista de Compliance",
-    "Analista de Homologação de Fornecedores",
-    "Analista de Certificações",
-    "Analista da Qualidade de Fornecedores",
-
-    # Multas, Prazos e Processos Administrativos
-    "Analista de Multas",
-    "Analista Administrativo de Frotas",
-    "Analista de Processos Administrativos",
-
-    # Melhoria Contínua e Excelência Operacional
-    "Analista de Melhoria Contínua",
-    "Especialista em Melhoria Contínua",
-    "Analista de Processos",
-    "Especialista em Processos",
-    "Analista de Excelência Operacional",
-    "Especialista em Excelência Operacional",
-    "Analista Lean Six Sigma",
-    "Especialista Lean Six Sigma",
-    "Continuous Improvement Analyst",
-    "Operational Excellence Analyst",
-    "Process Analyst",
+    # Power Platform (apps e automação na Microsoft)
+    "Analista Power Platform",
+    "Desenvolvedor Power Platform",
+    "Desenvolvedor Power Apps",
 ]
 
 # NÍVEL 2 — cargo ambíguo: o título também é usado em vaga de outra área
 # inteira ("Analista de Planejamento" existe em financeiro, RH, TI...).
 # Só conta se o título TAMBÉM tiver um QUALIFICADOR_DOMINIO junto.
+#
+# PCP, logística e processos moraram no nível 1 até 28/11/2026. Aqui, com
+# qualificadores só de dados, eles viram o plano B pedido pelo usuário: vaga
+# de operação que é, no título, uma vaga de dados.
 CARGOS_AMBIGUOS = [
     "Analista de Planejamento",
     "Analista Administrativo",
     "Assistente Administrativo",
     "Técnico Administrativo",
-    "Técnico de Processos",
-    "Técnico de Produção",
     "Analista de Operações",
     "Analista de Performance",
     "Business Analyst",
     "Analista de Negócios",
+    # Plano B: operação e cadeia de suprimentos
+    "Analista de PCP",
+    "Analista de Planejamento e Controle de Produção",
+    "Analista de Planejamento de Produção",
+    "Planejador de Produção",
+    "Analista de Logística",
+    "Analista Logístico",
+    "Analista de Supply Chain",
+    "Analista de Suprimentos",
+    "Analista de Transportes",
+    "Analista de Operações Logísticas",
+    "Analista de Frotas",
+    "Analista de Processos",
+    "Analista de Melhoria Contínua",
+    "Analista de Excelência Operacional",
 ]
 
 # O que precisa aparecer JUNTO no título pra confirmar o domínio quando o
-# cargo é ambíguo.
+# cargo é ambíguo. Só vocabulário de DADOS: um qualificador de logística
+# aqui ("logística") faria "Analista de Logística" aprovar a si mesmo e
+# desfaria o plano B.
 QUALIFICADORES_DOMINIO = [
-    "processos",
-    "produção",
-    "pcp",
-    "logística",
-    "logístico",
-    "frotas",
-    "roteirização",
-    "transporte",
-    "suprimentos",
-    "supply chain",
-    "estoque",
-    "armazém",
-    "indicadores",
-    "power bi",
-    "bi",
     "dados",
-    "auditoria",
-    "conformidade",
-    "compliance",
-    "mmog",
-    "multas",
-    "lean",
-    "six sigma",
-    "melhoria contínua",
-    "excelência operacional",
-    "operacional",
-    "sequenciamento",
+    "bi",
+    "power bi",
+    "business intelligence",
+    "indicadores",
+    "kpi",
+    "analytics",
+    "dashboards",
+    "inteligência",
+    "power platform",
 ]
 
-# NÍVEL 3 — ferramenta/metodologia como núcleo do título ("Analista de
-# Power BI", "Especialista MMOG/LE"). Espelho da regra do nível 2: lá o
-# cargo é ambíguo e pede domínio, aqui a ferramenta é ambígua e pede cargo.
+# NÍVEL 3 — ferramenta como núcleo do título ("Analista Power BI",
+# "Especialista Tableau"). Espelho da regra do nível 2: lá o cargo é ambíguo
+# e pede domínio, aqui a ferramenta é ambígua e pede cargo.
 #
-# "SAP" ficou de FORA de propósito. É ERP genérico usado por TI, Financeiro
-# e RH — mesmo com qualificador de cargo junto ("Consultor SAP ABAP"), a
-# esmagadora maioria é vaga técnica/funcional de SAP, não do domínio de
-# interesse. "MMOG/LE" entra porque, ao contrário de SAP, não tem uso fora
-# de auditoria/conformidade automotiva.
+# "SQL" ficou de FORA de propósito: "Analista SQL" / "Analista de Banco de
+# Dados SQL Server" é quase sempre DBA ou infraestrutura, outra profissão.
+# WMS e TMS saíram junto com a logística do nível 1.
 FERRAMENTAS_DE_CARGO = [
     "Power BI",
-    "MMOG/LE",
-    "WMS",
-    "TMS",
+    "Power Platform",
+    "Power Apps",
+    "Tableau",
+    "Qlik",
+    "Looker",
 ]
 
 # Palavra de cargo que confirma que a vaga de ferramenta é de análise, não
 # de desenvolvimento. "desenvolvedor"/"developer"/"engenheiro" ficam FORA
-# de propósito — é o que mantém vaga de dev fora do radar.
+# de propósito — é o que mantém vaga de dev genérico fora do radar. (As
+# vagas de "Desenvolvedor Power BI" entram pelo nível 1, nominalmente.)
 PALAVRAS_DE_CARGO = [
     "analista",
     "analyst",
@@ -198,6 +171,9 @@ PALAVRAS_DE_CARGO = [
 # exclusiva seria perdida. É o único lugar do projeto onde "perder" foi
 # escolhido de propósito sobre "duplicar" — porque aqui a vaga não serve, e
 # recebê-la só gasta a atenção que o alerta imediato precisa preservar.
+#
+# "Analista de Dados" tem homônimos que são outra profissão: cadastro e
+# digitação (entrada de dados) e proteção de dados (LGPD, jurídico).
 EXCLUSOES_TITULO = [
     "pcd",
     "pessoa com deficiência",
@@ -205,6 +181,19 @@ EXCLUSOES_TITULO = [
     "portador de deficiência",
     "portadores de deficiência",
     "candidatos com deficiência",
+    "cadastro",
+    "cadastral",
+    "cadastrais",
+    "digitação",
+    "digitador",
+    "proteção de dados",
+    "privacidade de dados",
+    # MEDIDO em 28/11/2026 no Remotar: 10 de 50 resultados de "power bi"
+    # eram o mesmo anúncio da BairesDev ("Work From Home Data Analyst
+    # (Power BI & ...)") repetido com ferramentas diferentes — vaga em
+    # inglês, para contratação internacional. Inglês básico é a lacuna
+    # declarada do perfil, e dez cópias soterrariam o resumo.
+    "work from home",
 ]
 
 
@@ -223,17 +212,11 @@ EXCLUSOES_TITULO = [
 # o filtro (o título ainda precisa bater um cargo pra ser aprovado).
 TERMOS_EXTRA = [
     "power bi",
-    "lean six sigma",
-    "melhoria contínua",
-    "excelência operacional",
-    "pcp",
-    "planejamento e controle de produção",
-    "roteirização",
-    "gestão de frotas",
-    "mmog",
-    "homologação de fornecedores",
-    "kaizen",
-    "indicadores logísticos",
+    "business intelligence",
+    "analytics",
+    "inteligência de dados",
+    "power platform",
+    "indicadores",
 ]
 
 TERMOS_DE_BUSCA = sorted(
@@ -243,17 +226,16 @@ TERMOS_DE_BUSCA = sorted(
 # Termos que rodam em TODO ciclo, fora do rodízio.
 #
 # São os títulos que mais aparecem no que interessa de verdade. Num rodízio
-# em que todos disputam vez por igual, com ~44 termos e 10 por ciclo, uma
-# volta completa leva 13 horas, e o termo que dá nome ao perfil inteiro
-# seria buscado uma vez a cada 13h — uma vaga real publicada logo depois da
-# passagem dele ficaria invisível meio dia. Tirar os principais do rodízio custa alguns minutos por ciclo e
-# resolve isso.
+# em que todos disputam vez por igual, com ~50 termos e 10 por ciclo, uma
+# volta completa leva 15 horas, e o termo que dá nome ao perfil inteiro
+# seria buscado uma vez a cada 15h. Tirar os principais do rodízio custa
+# alguns minutos por ciclo e resolve isso.
 TERMOS_PRIORITARIOS = [
-    "analista de pcp",
-    "analista de logística",
-    "analista de processos",
-    "analista de melhoria contínua",
+    "analista de dados",
     "analista de bi",
+    "power bi",
+    "business intelligence",
+    "desenvolvedor power bi",
 ]
 
 # Tamanho do BLOCO do rodízio por ciclo — não é o total de termos. O ciclo
@@ -262,6 +244,13 @@ TERMOS_PRIORITARIOS = [
 # tamanho da lista: dobrar TERMOS_DE_BUSCA dobra quantos ciclos até cobrir tudo
 # de novo, não o custo de um ciclo.
 TERMOS_POR_RODADA = 10
+
+# Versão do perfil. TROCAR quando o alvo mudar de verdade (cargos, cidades):
+# o ciclo compara com a versão gravada no banco e, se for diferente, religa a
+# varredura inicial — os termos novos trazem de uma vez tudo o que já estava
+# publicado, e isso tem de ir pro resumo, não virar rajada de alerta. Ver
+# ciclo.reiniciar_varredura_se_o_perfil_mudou.
+PERFIL_VERSAO = "2026-11-28-dados-bi"
 
 
 # ---------------------------------------------------------------------------

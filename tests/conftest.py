@@ -27,7 +27,7 @@ def regras() -> Regras:
 
 
 def vaga(
-    titulo: str = "Analista de PCP",
+    titulo: str = "Analista de Dados",
     local: str = "Itapetininga - SP",
     modalidade: str = "",
     empresa: str = "Empresa Teste",

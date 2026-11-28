@@ -31,6 +31,8 @@ CHAVE_VOLTAS = "rodizio_voltas"
 CHAVE_BATIMENTO = "batimento_ultimo_dia"
 CHAVE_DIGEST = "digest_ultimo_dia"
 CHAVE_FONTES_DIARIAS = "fontes_diarias_ultimo_dia"
+CHAVE_PERFIL_VERSAO = "perfil_versao"
+CHAVE_FONTE_VISTA = "fonte_vista:"
 
 
 def regras_do_perfil() -> Regras:
@@ -86,6 +88,30 @@ def termos_desta_rodada() -> list[str]:
         deposito.gravar(CHAVE_VOLTAS, str(voltas + 1))
 
     return prioritarios + bloco
+
+
+def reiniciar_varredura_se_o_perfil_mudou() -> bool:
+    """Perfil novo religa a varredura inicial.
+
+    Trocar o alvo (PCP -> dados, em 28/11/2026) tem o mesmo efeito de um
+    banco vazio: os termos novos trazem de uma vez tudo o que já estava
+    publicado na área nova, e cada vaga é "nova pro banco". Sem isto, a
+    troca de perfil chegaria como rajada de alerta imediato — exatamente o
+    que em_varredura_inicial existe pra impedir.
+
+    Zera as voltas do rodízio; enquanto a lista nova não for coberta uma
+    vez inteira, tudo vai pro resumo. Devolve True quando reiniciou.
+    """
+    if deposito.ler(CHAVE_PERFIL_VERSAO) == config.PERFIL_VERSAO:
+        return False
+    deposito.gravar(CHAVE_VOLTAS, "0")
+    deposito.gravar(CHAVE_RODIZIO, "0")
+    deposito.gravar(CHAVE_PERFIL_VERSAO, config.PERFIL_VERSAO)
+    logger.info(
+        "Perfil mudou (versão %s): varredura inicial religada — nada alerta "
+        "na hora até o rodízio cobrir os termos novos.", config.PERFIL_VERSAO,
+    )
+    return True
 
 
 def em_varredura_inicial() -> bool:
@@ -235,6 +261,8 @@ async def rodar(so_teste: bool = False) -> dict:
     #
     # Um resumo único, ranqueado, entrega a mesma informação melhor. Do
     # segundo ciclo em diante o comportamento normal volta sozinho.
+    if not so_teste:
+        reiniciar_varredura_se_o_perfil_mudou()
     estreia = em_varredura_inicial()
     if estreia:
         logger.info(
@@ -275,6 +303,11 @@ async def rodar(so_teste: bool = False) -> dict:
     ja_notificadas: set[str] = set()
 
     for fonte in fontes:
+        # Fonte nova é uma pequena estreia: na primeira vez que roda, tudo o
+        # que ela traz é "novo pro banco" sem ser novo no mundo. Vai tudo
+        # pro resumo; do ciclo seguinte em diante ela alerta normalmente.
+        fonte_estreando = deposito.ler(f"{CHAVE_FONTE_VISTA}{fonte.nome}") is None
+
         # Termos em paralelo — o gargalo é rede, não CPU, e esperar uma
         # resposta de cada vez multiplicaria o ciclo pelo número de termos.
         #
@@ -380,6 +413,7 @@ async def rodar(so_teste: bool = False) -> dict:
                 nota.total >= config.LIMIAR_ALERTA_IMEDIATO
                 and not antiga
                 and not estreia
+                and not fonte_estreando
                 and not longe
             )
 
@@ -414,10 +448,15 @@ async def rodar(so_teste: bool = False) -> dict:
             ineditas_da_fonte += 1
 
         logger.info(
-            "[%s] %d brutas → %d aprovadas → %d novas%s",
+            "[%s] %d brutas → %d aprovadas → %d novas%s%s",
             fonte.nome, len(vagas_da_fonte), aprovadas_da_fonte, ineditas_da_fonte,
             f" ({falhas} termo(s) com falha)" if falhas else "",
+            " — estreia da fonte, tudo pro resumo" if fonte_estreando else "",
         )
+        # Só marca como vista a fonte que respondeu. Fonte que falhou em tudo
+        # não "estreou": na primeira vez que funcionar, seria a rajada.
+        if not so_teste and falhas < len(resultados):
+            deposito.gravar(f"{CHAVE_FONTE_VISTA}{fonte.nome}", agora.date().isoformat())
 
     logger.info(
         "Ciclo concluído: %d brutas → %d aprovadas → %d novas.", brutas, aprovadas, novas
