@@ -662,3 +662,34 @@ def test_e4_cidade_de_verdade_nao_foi_quebrada(local, esperado):
     from radar.localizacao import casa_cidade
 
     assert casa_cidade(local, config.CIDADES, "SP") == esperado
+
+
+# ===========================================================================
+# Catho por cidade: a página da cidade não é da cidade
+# ===========================================================================
+
+def test_catho_por_cidade_usa_o_local_do_card_e_nao_a_cidade_pesquisada(regras):
+    """MEDIDO em 28/11/2026: /vagas/sp-itapetininga/ devolveu 20 cards e
+    nenhum era de Itapetininga. O código gravava local=cidade pesquisada, e
+    28 vagas de outras cidades (uma de Palmas/TO, nota 10) chegaram como
+    alerta imediato "em Itapetininga"."""
+    from bs4 import BeautifulSoup
+
+    from radar.fontes.por_cidade import _local_do_card_catho
+
+    html = """
+    <article><h2><a href="/vagas/analista-de-logistica-jr-agronegocio/39458158">
+      ANALISTA DE LOGISTICA JR - Agronegócio</a></h2>
+      <p class="mb-2"><span>KAIROS RH</span></p>
+      <p><span class="location-icon"></span>1\r\nvaga - Palmas</p>
+    </article>
+    <article><h2><a href="/vagas/x/1">Analista de PCP</a></h2></article>
+    """
+    cards = BeautifulSoup(html, "lxml").select("article")
+    assert _local_do_card_catho(cards[0]) == "Palmas"
+    assert _local_do_card_catho(cards[1]) == ""  # sem local: não inventa
+
+    palmas = vaga(titulo="ANALISTA DE LOGISTICA JR - Agronegócio", local="Palmas")
+    assert not avaliar(palmas, regras).aprovada
+    sem_local = vaga(titulo="Analista de PCP", local="")
+    assert not avaliar(sem_local, regras).aprovada

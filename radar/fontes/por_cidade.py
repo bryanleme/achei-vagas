@@ -215,8 +215,34 @@ class InfoJobsPorCidade(VarreduraPorCidade):
         return vagas
 
 
+def _local_do_card_catho(card) -> str:
+    """O local que o PRÓPRIO card declara — nunca a cidade pesquisada.
+
+    MEDIDO em 28/11/2026: a página /vagas/sp-itapetininga/ da Catho devolveu
+    20 cards e NENHUM era de Itapetininga — São Paulo, Curitiba, Joinville,
+    Salvador, João Pessoa... A Catho preenche a página da cidade com vaga do
+    Brasil inteiro. Gravar `local=cidade` carimbava todas como Itapetininga
+    (ou Sorocaba): 28 vagas de outras cidades viraram alerta imediato com
+    +3 de "cidade da região", entre elas uma de Palmas/TO com nota 10.
+
+    Formato do card: "1 vaga - Palmas". A cidade vem depois do hífen.
+    Card sem local devolve "" — e "" não casa cidade nenhuma, que é o
+    certo: sem saber onde é, não dá pra dizer que é na região.
+    """
+    no_local = card.select_one('p:has(span[class*="location"])')
+    texto = no_local.get_text(" ", strip=True) if no_local else ""
+    if " - " in texto:
+        texto = texto.split(" - ", 1)[1]
+    return " ".join(texto.split())
+
+
 class CathoPorCidade(VarreduraPorCidade):
-    """Catho por cidade."""
+    """Catho por cidade.
+
+    A página da cidade NÃO filtra por cidade (ver _local_do_card_catho). O
+    que ela ainda dá é volume: os cards que de fato são da região passam
+    pelo filtro de cidade normalmente; os outros são barrados por ele.
+    """
 
     nome = "Catho (por cidade)"
     BASE = "https://www.catho.com.br/vagas"
@@ -233,7 +259,7 @@ class CathoPorCidade(VarreduraPorCidade):
             vagas.append(montar(
                 titulo=no_titulo.get_text(strip=True),
                 empresa=no_empresa.get_text(strip=True) if no_empresa else "",
-                local=cidade,
+                local=_local_do_card_catho(card),
                 link=(f"https://www.catho.com.br{href}"
                       if href and href.startswith("/") else (href or "")),
                 fonte="Catho",
